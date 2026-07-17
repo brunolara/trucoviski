@@ -210,7 +210,9 @@ function doAction(m: Internal, seat: Seat, action: Action): ActionResult {
       return doPlayCard(m, h, seat, action.card);
     }
     if (action.type === "playHiddenCard") {
-      if (!h.isFerro) return { success: false, error: "invalidPhase" };
+      if (!h.isFerro && h.completedVazas.length === 0) {
+        return { success: false, error: "hiddenForbiddenFirstVaza" };
+      }
       return doPlayHiddenCard(m, h, seat, action.cardIndex);
     }
     if (action.type === "truco") return doTruco(m, h, seat, action.action);
@@ -289,7 +291,7 @@ function doPlayCard(
     return { success: false, error: "cardNotInHand" };
   }
 
-  return executePlayCard(m, h, seat, seatCards, idx);
+  return executePlayCard(m, h, seat, seatCards, idx, false);
 }
 
 /** Jogar carta por índice (ferro – cardIndex opaco, carta nunca exposta ao cliente). */
@@ -313,7 +315,8 @@ function doPlayHiddenCard(
     return { success: false, error: "invalidCardIndex" };
   }
 
-  return executePlayCard(m, h, seat, seatCards, cardIndex);
+  const covered = !h.isFerro;
+  return executePlayCard(m, h, seat, seatCards, cardIndex, covered);
 }
 
 function executePlayCard(
@@ -322,6 +325,7 @@ function executePlayCard(
   seat: Seat,
   seatCards: Card[],
   idx: number,
+  covered: boolean,
 ): ActionResult {
   const card = seatCards[idx]!;
 
@@ -331,17 +335,28 @@ function executePlayCard(
 
   seatCards.splice(idx, 1);
 
-  const newVaza = playInVaza(h.currentVaza, seat, deepCopyCard(card));
+  const newVaza = playInVaza(
+    h.currentVaza,
+    seat,
+    covered ? null : deepCopyCard(card),
+    covered,
+  );
   h.currentVaza = newVaza;
 
   const events: GameEvent[] = [
-    { type: "cardPlayed", seat, card: deepCopyCard(card) },
+    {
+      type: "cardPlayed",
+      seat,
+      card: covered ? null : deepCopyCard(card),
+      covered,
+    },
   ];
 
   if (isVazaComplete(newVaza)) {
     const vazaNumber = h.completedVazas.length + 1;
     const completed = completeVaza(
       newVaza.plays,
+      newVaza.covered,
       h.vira,
       h.dealerSeat,
       m.ruleset.rankOrder,
@@ -350,19 +365,17 @@ function executePlayCard(
 
     h.completedVazas.push(completed);
     h.currentVaza = null;
-    h.nextStarter = nextVazaStarter(completed);
+    h.nextStarter = nextVazaStarter(completed, h.dealerSeat);
 
-    const frozenPlays = newVaza.plays.map(deepCopyCard) as [
-      Card,
-      Card,
-      Card,
-      Card,
-    ];
+    const frozenPlays = newVaza.plays.map((p) =>
+      p ? deepCopyCard(p) : null,
+    ) as [Card | null, Card | null, Card | null, Card | null];
 
     events.push({
       type: "vazaCompleted",
       vazaNumber,
       plays: frozenPlays,
+      covered: newVaza.covered,
       winner: completed.winner,
     });
 
@@ -587,22 +600,8 @@ function computePlayerView(m: Internal, seat: Seat): PlayerView {
     handCards,
     partnerCards,
     vira: deepCopyCard(h.vira),
-    completedVazas: h.completedVazas.map((v): CompletedVaza => ({
-      plays: v.plays.map(deepCopyCard) as [Card, Card, Card, Card],
-      winner: v.winner,
-      tiedSeats: [...v.tiedSeats],
-    })),
-    currentVaza: h.currentVaza
-      ? {
-          plays: [...h.currentVaza.plays] as [
-            Card | null,
-            Card | null,
-            Card | null,
-            Card | null,
-          ],
-          currentSeat: h.currentVaza.currentSeat,
-        }
-      : null,
+    completedVazas: h.completedVazas.map(copyCompletedVaza),
+    currentVaza: h.currentVaza ? copyVazaInProgress(h.currentVaza) : null,
     scores: [...m.scores] as [number, number],
     trucoValue: h.trucoValue,
     trucoPendingTeam: h.trucoPendingTeam,
@@ -667,15 +666,18 @@ function computeLegalActions(
       }
     }
   } else {
-    if (h.currentVaza) {
-      if (h.currentVaza.currentSeat === seat) {
-        for (const card of h.cards[seat]) {
-          actions.push({ type: "playCard", card });
-        }
-      }
-    } else if (h.nextStarter === seat) {
+    const isMyTurn = h.currentVaza
+      ? h.currentVaza.currentSeat === seat
+      : h.nextStarter === seat;
+    if (isMyTurn) {
       for (const card of h.cards[seat]) {
         actions.push({ type: "playCard", card });
+      }
+      // Carta coberta permitida a partir da 2ª vaza (nunca na 1ª).
+      if (h.completedVazas.length >= 1) {
+        for (let i = 0; i < h.cards[seat].length; i++) {
+          actions.push({ type: "playHiddenCard", cardIndex: i });
+        }
       }
     }
   }
@@ -704,22 +706,8 @@ function freezeHand(h: MutableHandState): HandState {
       readonly Card[],
       readonly Card[],
     ],
-    completedVazas: h.completedVazas.map((v): CompletedVaza => ({
-      plays: v.plays.map(deepCopyCard) as [Card, Card, Card, Card],
-      winner: v.winner,
-      tiedSeats: [...v.tiedSeats],
-    })),
-    currentVaza: h.currentVaza
-      ? ({
-          plays: [...h.currentVaza.plays] as [
-            Card | null,
-            Card | null,
-            Card | null,
-            Card | null,
-          ],
-          currentSeat: h.currentVaza.currentSeat,
-        } satisfies VazaInProgress)
-      : null,
+    completedVazas: h.completedVazas.map(copyCompletedVaza),
+    currentVaza: h.currentVaza ? copyVazaInProgress(h.currentVaza) : null,
     trucoValue: h.trucoValue,
     trucoPendingTeam: h.trucoPendingTeam,
     trucoPendingValue: h.trucoPendingValue,
@@ -736,4 +724,31 @@ function freezeHand(h: MutableHandState): HandState {
 
 function deepCopyCard(c: Card): Card {
   return { suit: c.suit, rank: c.rank };
+}
+
+function copyCompletedVaza(v: CompletedVaza): CompletedVaza {
+  return {
+    plays: v.plays.map((p) => (p ? deepCopyCard(p) : null)) as [
+      Card | null,
+      Card | null,
+      Card | null,
+      Card | null,
+    ],
+    covered: [...v.covered] as [boolean, boolean, boolean, boolean],
+    winner: v.winner,
+    tiedSeats: [...v.tiedSeats],
+  };
+}
+
+function copyVazaInProgress(v: VazaInProgress): VazaInProgress {
+  return {
+    plays: v.plays.map((p) => (p ? deepCopyCard(p) : null)) as [
+      Card | null,
+      Card | null,
+      Card | null,
+      Card | null,
+    ],
+    covered: [...v.covered] as [boolean, boolean, boolean, boolean],
+    currentSeat: v.currentSeat,
+  };
 }

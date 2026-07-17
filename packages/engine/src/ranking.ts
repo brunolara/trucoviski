@@ -114,21 +114,42 @@ export function resolveVaza(
   rankOrder: readonly Rank[],
   suitOrder: readonly Suit[],
 ): VazaResult {
-  // Encontra a carta mais alta
-  let bestCard: Card = plays[0]!;
-  let bestSeats: Seat[] = [0];
+  return resolveVazaAmong(
+    [0, 1, 2, 3],
+    plays,
+    vira,
+    dealerSeat,
+    rankOrder,
+    suitOrder,
+  );
+}
 
-  for (let seat = 1; seat < 4; seat++) {
-    const card = plays[seat]!;
+/**
+ * Como `resolveVaza`, mas resolve apenas entre um subconjunto de assentos
+ * (usado para vazas com cartas cobertas, que não competem).
+ */
+export function resolveVazaAmong(
+  seats: readonly Seat[],
+  cards: readonly Card[],
+  vira: Card,
+  dealerSeat: Seat,
+  rankOrder: readonly Rank[],
+  suitOrder: readonly Suit[],
+): VazaResult {
+  let bestCard: Card = cards[0]!;
+  let bestSeats: Seat[] = [seats[0]!];
+
+  for (let i = 1; i < seats.length; i++) {
+    const card = cards[i]!;
     const cmp = compareCards(card, bestCard, vira, rankOrder, suitOrder);
 
     if (cmp > 0) {
       bestCard = card;
-      bestSeats = [seat as Seat];
+      bestSeats = [seats[i]!];
     } else if (cmp === 0) {
       // Manilhas nunca empatam (cada naipe é único)
       // Apenas não-manilhas de mesmo rank empatam
-      bestSeats.push(seat as Seat);
+      bestSeats.push(seats[i]!);
     }
   }
 

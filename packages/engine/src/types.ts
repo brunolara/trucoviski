@@ -76,7 +76,8 @@ export type ActionError =
   | "trucoNotPending"
   | "cannotRaiseYourOwnTruco"
   | "maxTrucoValue"
-  | "notYourDecision";
+  | "notYourDecision"
+  | "hiddenForbiddenFirstVaza";
 
 // ---- Eventos emitidos pelo engine ----------------------------------
 
@@ -101,13 +102,15 @@ export interface HandStartedEvent {
 export interface CardPlayedEvent {
   readonly type: "cardPlayed";
   readonly seat: Seat;
-  readonly card: Card;
+  readonly card: Card | null; // null = carta coberta (nunca revelada)
+  readonly covered: boolean;
 }
 
 export interface VazaCompletedEvent {
   readonly type: "vazaCompleted";
   readonly vazaNumber: number;
-  readonly plays: readonly [Card, Card, Card, Card];
+  readonly plays: readonly [Card | null, Card | null, Card | null, Card | null];
+  readonly covered: readonly [boolean, boolean, boolean, boolean];
   readonly winner: Seat | null; // null = canga (empate)
 }
 
@@ -182,13 +185,15 @@ export interface HandState {
 }
 
 export interface CompletedVaza {
-  readonly plays: readonly [Card, Card, Card, Card];
+  readonly plays: readonly [Card | null, Card | null, Card | null, Card | null];
+  readonly covered: readonly [boolean, boolean, boolean, boolean];
   readonly winner: Seat | null; // null = canga
   readonly tiedSeats: readonly Seat[];
 }
 
 export interface VazaInProgress {
   readonly plays: readonly [Card | null, Card | null, Card | null, Card | null];
+  readonly covered: readonly [boolean, boolean, boolean, boolean];
   readonly currentSeat: Seat;
 }
 

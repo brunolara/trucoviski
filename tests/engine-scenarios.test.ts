@@ -296,12 +296,13 @@ describe("ferro 11x11 scenarios", () => {
     );
   }, 30000);
 
-  it("playHiddenCard rejected outside ferro (invalidPhase, state unchanged)", () => {
+  it("playHiddenCard rejected on the 1st vaza outside ferro (hiddenForbiddenFirstVaza, state unchanged)", () => {
     const match = createMatch(paulista, 42);
     const st0 = match.state();
 
     // Verifica que não é ferro.
     expect(st0.hand?.isFerro).toBe(false);
+    expect(st0.hand?.completedVazas.length).toBe(0);
 
     // Captura estado antes.
     const handCards0 = st0.hand?.cards.map((c) => [...c]) ?? null;
@@ -309,15 +310,15 @@ describe("ferro 11x11 scenarios", () => {
     const completedVazas0 =
       st0.hand?.completedVazas.map((v) => ({ ...v })) ?? null;
 
-    // Dispara playHiddenCard fora de ferro (seat 0, índice 0).
+    // Dispara playHiddenCard fora de ferro, na 1ª vaza (seat 0, índice 0).
     const r = match.dispatch(0, {
       type: "playHiddenCard",
       cardIndex: 0,
     });
 
-    // Deve ser rejeitado com invalidPhase.
+    // Deve ser rejeitado com hiddenForbiddenFirstVaza (carta coberta só a partir da 2ª vaza).
     expect(r.success).toBe(false);
-    expect(r.error).toBe("invalidPhase");
+    expect(r.error).toBe("hiddenForbiddenFirstVaza");
 
     // Estado deve estar inalterado.
     const st1 = match.state();
