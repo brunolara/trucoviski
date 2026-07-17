@@ -1,0 +1,4 @@
+name: trucoviski2
+
+# F0 defines deployment structure only. Services arrive with their owning phase.
+services: {}

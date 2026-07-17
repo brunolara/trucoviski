@@ -1,0 +1,838 @@
+.screen {
+  --team-blue: #3498db;
+  --team-red: #e74c3c;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem;
+  background: radial-gradient(circle, #1a3c20 0%, #0d1e11 100%);
+  color: #e2e8f0;
+  gap: 0.4rem;
+  font-family: "Outfit", "Inter", sans-serif;
+  overflow-x: hidden;
+}
+
+/* ---- Top bar ---- */
+.topBar {
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  z-index: 10;
+}
+
+.scores {
+  display: flex;
+  gap: 0.8rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.teamScore {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.teamDot {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.divider {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.meta {
+  font-size: 0.7rem;
+  color: #7f8c8d;
+}
+
+/* ---- Board Area (Circular 2D) ---- */
+.board {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  height: 380px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  margin: 0.5rem 0;
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.6);
+}
+
+/* ---- Seats ---- */
+.seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+.avatar {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.activeAvatar {
+  animation: turnPulse 1.1s ease-in-out infinite;
+  transform: scale(1.08);
+}
+
+.dimmedAvatar {
+  opacity: 0.55;
+}
+
+@keyframes turnPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 8px 2px rgba(241, 196, 15, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 20px 6px rgba(241, 196, 15, 0.9);
+  }
+}
+
+.avatarLabel {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.seatName {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #bdc3c7;
+  margin-top: 0.25rem;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 0.1rem 0.4rem;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* Tomato Button on Avatar */
+.tomatoBtn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e74c3c;
+  border: none;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+  z-index: 10;
+}
+
+.tomatoBtn:hover {
+  transform: scale(1.2);
+}
+
+/* ---- Chat Bubble ---- */
+.chatBubble {
+  position: absolute;
+  bottom: 58px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #2c3e50;
+  padding: 0.4rem 0.8rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  max-width: 140px;
+  text-align: center;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  white-space: normal;
+  word-break: break-word;
+  z-index: 20;
+}
+
+.chatBubble::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px 6px 0;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.95) transparent;
+  display: block;
+  width: 0;
+}
+
+/* Emote Bubble */
+.emoteBubble {
+  position: absolute;
+  font-size: 2.2rem;
+  z-index: 25;
+  pointer-events: none;
+}
+
+/* Shown Card Bubble */
+.shownCardBubble {
+  position: absolute;
+  top: 58px;
+  background: linear-gradient(135deg, #2c3e50 0%, #1a252f 100%);
+  border: 1px solid #f1c40f;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  z-index: 15;
+}
+
+.shownCardText {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  color: #f1c40f;
+  font-weight: 700;
+  margin-bottom: 0.1rem;
+}
+
+.shownCardMini {
+  font-size: 0.85rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+/* Partner Cards Container */
+.partnerCardsContainer {
+  display: flex;
+  gap: 0.2rem;
+  margin-top: 0.3rem;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0.15rem 0.3rem;
+  border-radius: 6px;
+}
+
+.partnerMiniCard {
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: #fff;
+  padding: 0.05rem 0.2rem;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* ---- Table Center ---- */
+.tableCenter {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 170px;
+  height: 170px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viraWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.4rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  z-index: 1;
+}
+
+.viraLabel {
+  font-size: 0.6rem;
+  color: #95a5a6;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.1rem;
+}
+
+.viraCard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0.2rem 0.5rem;
+  background: #ffffff;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 1rem;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.cardRank {
+  font-size: 1rem;
+}
+
+.cardSuit {
+  font-size: 0.9rem;
+}
+
+.trucoValue {
+  font-size: 0.65rem;
+  color: #f1c40f;
+  font-weight: 700;
+  margin-top: 0.2rem;
+  white-space: nowrap;
+}
+
+/* Played Cards Grid (arranged cross-wise) */
+.playedCardsGrid {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.playedCardWrapper {
+  position: absolute;
+  width: 44px;
+  height: 56px;
+}
+
+.playPos0 {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.playPos1 {
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.playPos2 {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.playPos3 {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.playedCard {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.playedCardEmpty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.playedCardEmpty span {
+  font-size: 0.5rem;
+  color: rgba(255, 255, 255, 0.25);
+  text-transform: uppercase;
+}
+
+/* ---- Flying Tomatoes ---- */
+.tomatoEffect {
+  position: absolute;
+  font-size: 2rem;
+  z-index: 30;
+  pointer-events: none;
+}
+
+/* ---- Truco Alert ---- */
+.trucoAlert {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.5rem;
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 8px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #e74c3c;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(231, 76, 60, 0.1);
+}
+
+/* ---- Presentation Banner ---- */
+.presentationBanner {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.5rem 0.8rem;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #f1c40f;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- Vazas Area ---- */
+.vazasArea {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.4rem;
+  border-radius: 8px;
+}
+
+.vazaRow {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.vazaWinner {
+  font-size: 0.65rem;
+  color: #95a5a6;
+  font-weight: 600;
+}
+
+.miniCard {
+  padding: 0.1rem 0.3rem;
+  background: #ffffff;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* ---- Turn Indicator Text ---- */
+.turnIndicatorText {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f1c40f;
+  text-shadow: 0 0 8px rgba(241, 196, 15, 0.3);
+  margin: 0.2rem 0;
+}
+
+/* ---- Eleven Box ---- */
+.elevenBox {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.6rem;
+  background: rgba(46, 204, 113, 0.15);
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.elevenText {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #2ecc71;
+  margin-bottom: 0.4rem;
+}
+
+.elevenBtns {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+/* ---- Hand Area (Cards) ---- */
+.handArea {
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  margin-top: auto;
+  border-radius: 12px;
+  transition: box-shadow 0.3s;
+}
+
+.handAreaActive {
+  box-shadow: 0 0 0 2px rgba(241, 196, 15, 0.5);
+}
+
+.handLabel {
+  font-size: 0.7rem;
+  color: #7f8c8d;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hand {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  align-items: flex-end;
+  height: 96px;
+}
+
+.handCardWrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.handCard {
+  width: 58px;
+  height: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.ferroCard {
+  width: 58px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1e272e 0%, #0f1418 100%);
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.revealBtn {
+  position: absolute;
+  bottom: -18px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s;
+}
+
+.revealBtn:hover {
+  background: #f1c40f;
+  border-color: #f1c40f;
+  color: #000;
+  transform: scale(1.15);
+}
+
+/* ---- Action Area ---- */
+.actionArea {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.playActions {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: center;
+}
+
+.cardBtn {
+  padding: 0.45rem 0.7rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.cardBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.trucoActions {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.trucoBtn {
+  padding: 0.55rem 1.1rem;
+  background: #c0392b;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.9rem;
+  box-shadow: 0 3px 8px rgba(192, 57, 43, 0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.trucoBtn:hover {
+  background: #d35400;
+  transform: translateY(-2px);
+}
+
+.acceptBtn {
+  padding: 0.55rem 1rem;
+  background: #27ae60;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  box-shadow: 0 3px 8px rgba(39, 174, 96, 0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.acceptBtn:hover {
+  background: #2ecc71;
+  transform: translateY(-2px);
+}
+
+.runBtn {
+  padding: 0.55rem 1rem;
+  background: #7f8c8d;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.runBtn:hover {
+  background: #95a5a6;
+  transform: translateY(-2px);
+}
+
+.playBtn {
+  padding: 0.55rem 1.1rem;
+  background: #2ecc71;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* ---- Social Control Panel ---- */
+.socialControl {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.45rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  z-index: 10;
+}
+
+.emojiPicker {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.2rem;
+}
+
+.emojiBtn {
+  background: transparent;
+  border: none;
+  font-size: 1.35rem;
+  cursor: pointer;
+  padding: 0.1rem;
+  transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.emojiBtn:hover {
+  transform: scale(1.3) rotate(8deg);
+}
+
+.chatForm {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.chatInput {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  color: #ffffff;
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.chatInput:focus {
+  border-color: #f1c40f;
+}
+
+.chatSubmitBtn {
+  background: #f1c40f;
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.chatSubmitBtn:hover {
+  background: #f39c12;
+}
+
+/* ---- Waiting Screen ---- */
+.waiting {
+  color: #7f8c8d;
+  font-size: 1rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+/* ---- Footer ---- */
+.footer {
+  width: 100%;
+  max-width: 400px;
+}
+
+.leaveBtn {
+  width: 100%;
+  padding: 0.4rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #7f8c8d;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.leaveBtn:hover {
+  background: rgba(231, 76, 60, 0.1);
+  border-color: rgba(231, 76, 60, 0.2);
+  color: #e74c3c;
+}
+
+/* ---- Mobile & Safe Areas (F5) ---- */
+@media (max-width: 600px) {
+  .screen {
+    padding-top: env(safe-area-inset-top, 0.5rem);
+    padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+    padding-left: env(safe-area-inset-left, 0.5rem);
+    padding-right: env(safe-area-inset-right, 0.5rem);
+  }
+
+  .handCard,
+  .ferroCard {
+    width: 68px;
+    height: 94px;
+    font-size: 1.15rem;
+  }
+
+  .cardRank {
+    font-size: 1.25rem;
+  }
+
+  .cardSuit {
+    font-size: 1.1rem;
+  }
+
+  .hand {
+    height: 110px;
+  }
+
+  .actionArea {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .screen {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    padding-left: env(safe-area-inset-left, 0.5rem);
+    padding-right: env(safe-area-inset-right, 0.5rem);
+  }
+
+  .board {
+    width: 260px;
+    height: 260px;
+    margin: 0;
+  }
+
+  .handArea {
+    width: auto;
+    margin-top: 0;
+  }
+
+  .topBar {
+    width: 100%;
+    margin-bottom: 0.2rem;
+  }
+
+  .actionArea,
+  .socialControl,
+  .vazasArea {
+    max-width: 250px;
+  }
+}

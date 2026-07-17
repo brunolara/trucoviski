@@ -1,0 +1,120 @@
+.screen {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: linear-gradient(135deg, #0d1b0f 0%, #1a3a1a 100%);
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 2rem 1.5rem;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f4d03f;
+  margin-bottom: 1rem;
+}
+
+.info {
+  font-size: 0.9rem;
+  color: #c0c0a0;
+  margin-bottom: 1.2rem;
+  line-height: 1.7;
+}
+
+.info strong {
+  color: #f4d03f;
+  user-select: all;
+}
+
+.seats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+}
+
+.seat {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.mySeat {
+  background: rgba(244, 208, 63, 0.1);
+  border-color: rgba(244, 208, 63, 0.25);
+}
+
+.seatNum {
+  font-weight: 700;
+  color: #5a7a5a;
+  min-width: 28px;
+}
+
+.seatName {
+  flex: 1;
+  text-align: left;
+  color: #e8dcc8;
+}
+
+.you {
+  font-size: 0.75rem;
+  color: #f4d03f;
+  font-style: italic;
+}
+
+.hint {
+  font-size: 0.85rem;
+  color: #7a9a7a;
+  margin-bottom: 1rem;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fillBtn {
+  width: 100%;
+  padding: 0.7rem;
+  border-radius: 10px;
+  background: #2980b9;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+
+.fillBtn:hover {
+  background: #3498db;
+}
+
+.leaveBtn {
+  width: 100%;
+  padding: 0.7rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #a0b89e;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.leaveBtn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}

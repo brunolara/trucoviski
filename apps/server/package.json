@@ -1,0 +1,19 @@
+{
+  "name": "@trucoviski/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@trucoviski/bots": "workspace:*",
+    "@trucoviski/engine": "workspace:*",
+    "@trucoviski/shared": "workspace:*",
+    "colyseus": "0.17.10",
+    "zod": "^4.4.3"
+  }
+}

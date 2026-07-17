@@ -1,0 +1,89 @@
+.screen {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: linear-gradient(135deg, #0d1b0f 0%, #1a3a1a 100%);
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 2rem 1.5rem;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+}
+
+.heading {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #f4d03f;
+  margin-bottom: 1rem;
+}
+
+.result {
+  margin-bottom: 1rem;
+}
+
+.win {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #2ecc71;
+  text-shadow: 0 0 20px rgba(46, 204, 113, 0.3);
+}
+
+.loss {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #e74c3c;
+}
+
+.scores {
+  font-size: 0.95rem;
+  color: #c0c0a0;
+  line-height: 1.8;
+  margin-bottom: 0.8rem;
+}
+
+.scores strong {
+  color: #f4d03f;
+}
+
+.winner {
+  font-size: 0.9rem;
+  color: #a0b89e;
+  margin-bottom: 1rem;
+}
+
+.winner strong {
+  color: #e8dcc8;
+}
+
+.replay {
+  margin: 1rem 0;
+  padding: 0.8rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: #5a7a5a;
+  line-height: 1.5;
+}
+
+.homeBtn {
+  width: 100%;
+  padding: 0.8rem;
+  border-radius: 10px;
+  background: #c0392b;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  transition: background 0.2s;
+  margin-top: 0.5rem;
+}
+
+.homeBtn:hover {
+  background: #e74c3c;
+}
