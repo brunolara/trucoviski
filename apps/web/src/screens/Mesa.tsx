@@ -658,7 +658,7 @@ export function Mesa() {
                   key={i}
                   className={styles.cardBtn}
                   onClick={() => dispatchAction(a)}
-                  data-testid={`play-card-btn-${i}`}
+                  data-testid={`play-hidden-btn-${i}`}
                 >
                   Jogar Carta {i + 1} (Oculta)
                 </button>

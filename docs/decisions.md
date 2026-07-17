@@ -60,3 +60,23 @@ Anónimo: nickname + token em localStorage (não implementado na F1).
 Os termos canónicos são **mão** (jogador que inicia a mão) e **vaza** (rodada de
 cartas). Implementações futuras não podem substituir esses termos nem tomar
 decisões silenciosas de regra.
+
+## Decisões F5 (implementadas)
+
+- Carta coberta fora do ferro: permitida a partir da 2ª vaza (nunca na 1ª).
+  Nunca vence a vaza e nunca é revelada (nem no fim da mão); o engine não guarda
+  qual carta era — só remove-a da mão e marca o slot `null`+`covered`.
+- Desistir da mão: ação individual e imediata de qualquer jogador na fase
+  `playing` sem truco pendente (mesmo fora da vez, inclusive em mão de onze e
+  ferro); o time adversário ganha o `trucoValue` vigente.
+- Botões de truco: rótulos refletem o valor real ("Truco!", "Pedir Seis!",
+  "Pedir Nove!", "Pedir Doze!", "Aceitar (vale N)").
+- Bug do botão "Preencher com Bots" sumindo com 2+ humanos: causa raiz era a
+  mensagem dedicada `ownerInfo`, enviada uma única vez no `onJoin` antes de o
+  cliente registrar handlers (descartada pelo Colyseus); corrigido embutindo
+  `ownerSessionId` em todo `SnapshotMessage`. Corrigido também um problema
+  correlato: `onJoin` só notificava os presentes quando a sala enchia, deixando
+  o lobby do dono desatualizado com 2-3 jogadores.
+- Mistura de bots: `fillBots` normaliza assentos (humanos nos mais baixos, na
+  ordem de entrada; bots no resto) — com 2 humanos, cada time fica com 1
+  humano + 1 bot.
