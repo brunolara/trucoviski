@@ -51,8 +51,8 @@ vez de aplicar direto:
   atrás de holds longos — a fila drena, os holds só regulam a apresentação
   intermediária. Na prática a fila raramente terá >2 itens; manter simples.
 
-Problema resolvido de graça: o banner mostra "quem ganhou a vaza" e "quem
-ganhou a mão", que hoje não aparecem em lugar nenhum (só na listinha de vazas).
+Problema resolvido de graça: o banner mostra "quem ganhou a vaza" e "quem ganhou
+a mão", que hoje não aparecem em lugar nenhum (só na listinha de vazas).
 
 ### Verificação
 
@@ -65,9 +65,11 @@ banner do vencedor, truco exibe banner antes da resposta do bot.
 
 Dados: `trucoValue` já está no `PlayerView`; vaza atual =
 `completedVazas.length + 1`; **número da mão não é exposto** — adicionar
-`handNumber` ao `PlayerView` (engine: [types.ts](../packages/engine/src/types.ts)
-+ onde monta o playerView; passa pelo wire sem mudança no shared além do tipo
-reexportado).
+`handNumber` ao `PlayerView` (engine:
+[types.ts](../packages/engine/src/types.ts)
+
+- onde monta o playerView; passa pelo wire sem mudança no shared além do tipo
+  reexportado).
 
 UI ([Mesa.tsx](../apps/web/src/screens/Mesa.tsx), topBar): substituir o
 `metadata.rulesetName` (info de dev, sem valor pro jogador) por:
@@ -85,7 +87,8 @@ continuam.
 
 Só cliente. Convenção: **time 0 (seats 0/2) = azul, time 1 (seats 1/3) =
 vermelho** — constante única `TEAM_COLORS` em Mesa.tsx + variáveis CSS
-`--team-blue` / `--team-red` em [Mesa.module.css](../apps/web/src/screens/Mesa.module.css).
+`--team-blue` / `--team-red` em
+[Mesa.module.css](../apps/web/src/screens/Mesa.module.css).
 
 Aplicar a cor do time em:
 
@@ -104,8 +107,8 @@ competir com as cores de time.
 ## Fase 4 — Avatares
 
 Só cliente, zero deps. O círculo com iniciais já existe; trocar por emoji
-determinístico por seat: `AVATARS = ["🤠", "👵", "🧔", "👩‍🌾"]` indexado pelo
-seat absoluto (bots e humanos). Nome embaixo, anel na cor do time (Fase 3).
+determinístico por seat: `AVATARS = ["🤠", "👵", "🧔", "👩‍🌾"]` indexado pelo seat
+absoluto (bots e humanos). Nome embaixo, anel na cor do time (Fase 3).
 
 Pulado: upload/escolha de avatar — adicionar se o jogo ganhar auth/perfil.
 
@@ -116,23 +119,23 @@ Pulado: upload/escolha de avatar — adicionar se o jogo ganhar auth/perfil.
 Já existe `activeAvatar` + texto "Sua vez!". Reforçar (padrão PokerStars: anel
 pulsante no jogador ativo):
 
-- Anel pulsante (CSS `@keyframes`, glow amarelo/dourado por cima da cor do
-  time) no avatar de `turnSeat`; demais avatares levemente esmaecidos.
+- Anel pulsante (CSS `@keyframes`, glow amarelo/dourado por cima da cor do time)
+  no avatar de `turnSeat`; demais avatares levemente esmaecidos.
 - Seta "▶" posicionada apontando para o pod do jogador ativo (ou chip "vez"
   colado no avatar — mais simples, mesma informação).
 - Quando `turnSeat === seat`, destacar também a área da mão (borda glow).
 
-Pulado: timer de turno com arco de contagem (PokerStars) — não existe timeout
-de turno no servidor; adicionar se/quando houver.
+Pulado: timer de turno com arco de contagem (PokerStars) — não existe timeout de
+turno no servidor; adicionar se/quando houver.
 
 ---
 
 ## Fase 6 — Sobreviver ao F5 (sala na URL + reconexão)
 
-Hoje o F5 mata a sessão: o `reconnectionToken` do Colyseus só vive em memória.
-O servidor **já espera 15s** por reconexão em queda involuntária durante a
-partida ([room.ts](../apps/server/src/room.ts), `allowReconnection(client, 15)`)
-— falta o cliente conseguir voltar.
+Hoje o F5 mata a sessão: o `reconnectionToken` do Colyseus só vive em memória. O
+servidor **já espera 15s** por reconexão em queda involuntária durante a partida
+([room.ts](../apps/server/src/room.ts), `allowReconnection(client, 15)`) — falta
+o cliente conseguir voltar.
 
 Em [store.ts](../apps/web/src/store.ts):
 
@@ -154,8 +157,8 @@ Em [store.ts](../apps/web/src/store.ts):
 - Limpar o storage nos mesmos pontos que a URL (leave voluntário, `finished`,
   reconexão definitivamente falha).
 
-Limite conhecido: F5 durante a partida com >15s parado → o servidor fecha a
-sala (fail-closed atual). Aumentar a janela para 60s é uma linha, se incomodar.
+Limite conhecido: F5 durante a partida com >15s parado → o servidor fecha a sala
+(fail-closed atual). Aumentar a janela para 60s é uma linha, se incomodar.
 
 ---
 
@@ -163,23 +166,22 @@ sala (fail-closed atual). Aumentar a janela para 60s é uma linha, se incomodar.
 
 Comportamentos consolidados que este plano adota:
 
-| PokerStars | Aqui |
-| --- | --- |
-| Delay mínimo fixo entre ações de oponentes, mesmo com decisão instantânea | Fase 1a (bot delay 1s) |
+| PokerStars                                                                 | Aqui                                  |
+| -------------------------------------------------------------------------- | ------------------------------------- |
+| Delay mínimo fixo entre ações de oponentes, mesmo com decisão instantânea  | Fase 1a (bot delay 1s)                |
 | Showdown pausa: cartas ficam expostas, vencedor destacado, só depois limpa | Fase 1b (hold de 1.8–2s pós-vaza/mão) |
-| Fila de apresentação desacoplada do estado do servidor | Fase 1b (snapshot queue) |
-| Pote e blinds sempre visíveis no centro | Fase 2 (Mão · Vaza · Valendo) |
-| Pods fixos por assento: avatar + nome + stack | Fases 3–4 |
-| Anel/arco luminoso no jogador ativo | Fase 5 |
+| Fila de apresentação desacoplada do estado do servidor                     | Fase 1b (snapshot queue)              |
+| Pote e blinds sempre visíveis no centro                                    | Fase 2 (Mão · Vaza · Valendo)         |
+| Pods fixos por assento: avatar + nome + stack                              | Fases 3–4                             |
+| Anel/arco luminoso no jogador ativo                                        | Fase 5                                |
 
 ---
 
 ## Ordem e dependências
 
 1 (pacing) e 6 (F5) são independentes entre si e as mais importantes — 6 pode
-até vir primeiro, já que facilita testar tudo o resto sem perder a sala. 3
-antes de 4 e 5 (as cores de time alimentam anéis e banners). 2 é isolada e
-pequena.
+até vir primeiro, já que facilita testar tudo o resto sem perder a sala. 3 antes
+de 4 e 5 (as cores de time alimentam anéis e banners). 2 é isolada e pequena.
 
-Sugestão de execução: **6 → 1 → 2 → 3 → 4 → 5**, com teste manual (3 bots)
-após as fases 6 e 1 antes de seguir.
+Sugestão de execução: **6 → 1 → 2 → 3 → 4 → 5**, com teste manual (3 bots) após
+as fases 6 e 1 antes de seguir.

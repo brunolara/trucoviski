@@ -10,8 +10,10 @@ import type {
   Rank,
   Seat,
   Suit,
+  Team,
   VazaInProgress,
 } from "./types.js";
+import { TEAMS } from "./types.js";
 
 const NO_COVER: readonly [boolean, boolean, boolean, boolean] = [
   false,
@@ -113,6 +115,41 @@ export function nextVazaStarter(
 ): Seat {
   if (completed.winner !== null) return completed.winner;
   return completed.tiedSeats[0] ?? dealerSeat;
+}
+
+/**
+ * Vencedor da mão dado o conjunto de vazas já completadas, ou null se ainda
+ * não decidido (precisa da 3ª vaza). Regra: 2 vazas para o mesmo time resolve;
+ * na 3ª vaza o time com mais vazas vence; canga tripla decide para o time do mão.
+ */
+export function resolveHandWinner(
+  completedVazas: readonly CompletedVaza[],
+  dealerSeat: Seat,
+): Team | null {
+  let t0 = 0;
+  let t1 = 0;
+  for (const v of completedVazas) {
+    if (v.winner !== null) {
+      if (TEAMS[v.winner] === 0) t0++;
+      else t1++;
+    }
+  }
+
+  const n = completedVazas.length;
+
+  if (n >= 3) {
+    if (t0 > t1) return 0;
+    if (t1 > t0) return 1;
+    return TEAMS[dealerSeat];
+  }
+
+  if (n === 2) {
+    if (t0 >= 1 && t1 === 0) return 0;
+    if (t1 >= 1 && t0 === 0) return 1;
+    return null;
+  }
+
+  return null;
 }
 
 /** Fase corrente da mão (para validação de ações). */

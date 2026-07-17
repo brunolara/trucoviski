@@ -72,6 +72,7 @@ export {
   isVazaComplete,
   nextVazaStarter,
   playInVaza,
+  resolveHandWinner,
   startVaza,
   viraIndex,
 } from "./hand.js";
@@ -83,5 +84,10 @@ export { paulista, teamForSeat } from "./rulesets/paulista.js";
 export { createMatch } from "./match.js";
 
 // Simulation
-export { runSimulation } from "./simulation.js";
-export type { SimulationConfig, SimulationResult } from "./simulation.js";
+export { runArena, runSimulation } from "./simulation.js";
+export type {
+  ArenaConfig,
+  ArenaResult,
+  SimulationConfig,
+  SimulationResult,
+} from "./simulation.js";

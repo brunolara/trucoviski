@@ -562,6 +562,23 @@ export function Mesa() {
                   >
                     ?
                   </div>
+                  {isMyTurn && (
+                    <div className={styles.cardControls}>
+                      <button
+                        className={styles.cardBtn}
+                        onClick={() => {
+                          const a = legalPlayHidden.find(
+                            (a) =>
+                              a.type === "playHiddenCard" && a.cardIndex === i,
+                          );
+                          if (a) dispatchAction(a);
+                        }}
+                        data-testid={`play-hidden-btn-${i}`}
+                      >
+                        Jogar (coberta)
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               ))
             : view.handCards.map((c, i) => (
@@ -599,6 +616,51 @@ export function Mesa() {
                       {SUIT_SYMBOLS[c.suit] ?? ""}
                     </span>
                   </div>
+                  {isMyTurn && (
+                    <div className={styles.cardControls}>
+                      {legalPlayCards.some(
+                        (a) =>
+                          a.type === "playCard" &&
+                          a.card.rank === c.rank &&
+                          a.card.suit === c.suit,
+                      ) && (
+                        <button
+                          className={styles.cardBtn}
+                          onClick={() => {
+                            const a = legalPlayCards.find(
+                              (a) =>
+                                a.type === "playCard" &&
+                                a.card.rank === c.rank &&
+                                a.card.suit === c.suit,
+                            );
+                            if (a) dispatchAction(a);
+                          }}
+                          data-testid={`play-card-btn-${i}`}
+                        >
+                          Jogar
+                        </button>
+                      )}
+                      {legalPlayHidden.some(
+                        (a) => a.type === "playHiddenCard" && a.cardIndex === i,
+                      ) && (
+                        <button
+                          className={styles.coverBtn}
+                          onClick={() => {
+                            const hiddenAction = legalPlayHidden.find(
+                              (a) =>
+                                a.type === "playHiddenCard" &&
+                                a.cardIndex === i,
+                            );
+                            if (hiddenAction) dispatchAction(hiddenAction);
+                          }}
+                          title="Jogar esta carta coberta (nunca vence a vaza)"
+                          data-testid={`cover-card-btn-${i}`}
+                        >
+                          🂠 Virar
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {/* Show Card eye button */}
                   <button
                     className={styles.revealBtn}
@@ -607,65 +669,14 @@ export function Mesa() {
                   >
                     👁️
                   </button>
-                  {/* Carta coberta (a partir da 2ª vaza) */}
-                  {legalPlayHidden.some(
-                    (a) => a.type === "playHiddenCard" && a.cardIndex === i,
-                  ) && (
-                    <button
-                      className={styles.coverBtn}
-                      onClick={() => {
-                        const hiddenAction = legalPlayHidden.find(
-                          (a) =>
-                            a.type === "playHiddenCard" && a.cardIndex === i,
-                        );
-                        if (hiddenAction) dispatchAction(hiddenAction);
-                      }}
-                      title="Jogar esta carta coberta (nunca vence a vaza)"
-                      data-testid={`cover-card-btn-${i}`}
-                    >
-                      🂠 Virar
-                    </button>
-                  )}
                 </motion.div>
               ))}
         </div>
       </div>
 
-      {/* Actions (Truco responses/proposals, card plays) */}
+      {/* Actions (Truco responses/proposals) */}
       {isMyTurn && (
         <div className={styles.actionArea} data-testid="action-area">
-          {/* Normal play card buttons */}
-          {legalPlayCards.length > 0 && (
-            <div className={styles.playActions}>
-              {legalPlayCards.map((a, i) => (
-                <button
-                  key={i}
-                  className={styles.cardBtn}
-                  onClick={() => dispatchAction(a)}
-                  data-testid={`play-card-btn-${i}`}
-                >
-                  Jogar {cardLabel((a as { card: Card }).card)}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Hidden card plays (Ferro) */}
-          {legalPlayHidden.length > 0 && (
-            <div className={styles.playActions}>
-              {legalPlayHidden.map((a, i) => (
-                <button
-                  key={i}
-                  className={styles.cardBtn}
-                  onClick={() => dispatchAction(a)}
-                  data-testid={`play-hidden-btn-${i}`}
-                >
-                  Jogar Carta {i + 1} (Oculta)
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Truco decisions */}
           {legalTrucoActions.length > 0 && (
             <div className={styles.trucoActions}>

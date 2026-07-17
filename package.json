@@ -9,6 +9,7 @@
     "pnpm": ">=11 <12"
   },
   "scripts": {
+    "arena": "tsx scripts/arena.mts",
     "build": "turbo run build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

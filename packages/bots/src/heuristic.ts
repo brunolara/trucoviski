@@ -5,19 +5,7 @@
 
 import { RANKS, SUITS, compareCards, TEAMS } from "@trucoviski/engine";
 import type { Card, PlayerView, Action, Seat } from "@trucoviski/engine";
-
-function getCardStrength(card: Card, vira: Card): number {
-  const viraIdx = RANKS.indexOf(vira.rank);
-  if (viraIdx === -1) return 0;
-  const manilhaRank = RANKS[(viraIdx + 1) % RANKS.length]!;
-  if (card.rank === manilhaRank) {
-    if (card.suit === "ouros") return 10;
-    if (card.suit === "espadas") return 11;
-    if (card.suit === "copas") return 12;
-    if (card.suit === "paus") return 13;
-  }
-  return RANKS.indexOf(card.rank);
-}
+import { getCardStrength } from "./strength.js";
 
 export function decideHeuristicAction(view: PlayerView): Action | null {
   const actions = view.legalActions;

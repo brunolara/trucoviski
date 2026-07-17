@@ -133,6 +133,126 @@ export function runSimulation(config: SimulationConfig): SimulationResult {
   };
 }
 
+// ---- Arena: política vs política --------------------------------------
+
+export type BotPolicy = (view: PlayerView) => Action | null;
+
+export interface ArenaConfig {
+  /** Número de jogos a simular. */
+  games: number;
+  /** Política do time 0 (assentos 0 e 2). */
+  policyTeam0: BotPolicy;
+  /** Política do time 1 (assentos 1 e 3). */
+  policyTeam1: BotPolicy;
+  /** Semente base (cada jogo usa base + gameIndex). */
+  seed?: number;
+  /** Limite de ações por jogo (diagnóstico). */
+  maxActions?: number;
+  /** Ruleset a usar (default: paulista). */
+  ruleset?: RuleSet;
+}
+
+export interface ArenaResult {
+  games: number;
+  completed: number;
+  timedOut: number;
+  team0Wins: number;
+  team1Wins: number;
+  /** Taxa de vitória do time 0 entre os jogos completados (0..1). */
+  winRateTeam0: number;
+  errors: string[];
+}
+
+/**
+ * Roda `games` partidas completas com uma política determinística (ou não)
+ * por time, e reporta o placar agregado. Base da arena de medição (F0):
+ * qualquer melhoria de bot deve bater a versão anterior em winrate aqui.
+ */
+export function runArena(config: ArenaConfig): ArenaResult {
+  const {
+    games,
+    policyTeam0,
+    policyTeam1,
+    seed = 42,
+    maxActions = 5000,
+    ruleset = paulista,
+  } = config;
+
+  // PRNG determinístico separado para fallback (ação ilegal/nula da política)
+  const fallbackRng = createPRNG(seed);
+
+  let completed = 0;
+  let timedOut = 0;
+  let team0Wins = 0;
+  let team1Wins = 0;
+  const errors: string[] = [];
+
+  for (let g = 0; g < games; g++) {
+    const gameSeed = seed + g;
+    const match = createMatch(ruleset, gameSeed);
+
+    let actionCount = 0;
+    let finished = false;
+
+    while (actionCount < maxActions) {
+      const s = match.state();
+      if (s.phase === "matchFinished") {
+        finished = true;
+        if (s.scores[0] >= ruleset.winThreshold) team0Wins++;
+        else team1Wins++;
+        break;
+      }
+
+      const actor = findActor(match);
+      if (!actor) {
+        errors.push(
+          `Game ${gameSeed}: no legal actions but match not finished (hand ${s.handNumber})`,
+        );
+        break;
+      }
+
+      const view: PlayerView = match.playerView(actor.seat);
+      if (view.legalActions.length === 0) {
+        errors.push(
+          `Game ${gameSeed}: seat ${actor.seat} has no legal actions but should (hand ${s.handNumber})`,
+        );
+        break;
+      }
+
+      const policy = TEAMS[actor.seat] === 0 ? policyTeam0 : policyTeam1;
+      const decided = policy(view);
+      const action =
+        decided ??
+        view.legalActions[fallbackRng.nextInt(view.legalActions.length)]!;
+
+      const result = match.dispatch(actor.seat, action);
+      if (!result.success) {
+        errors.push(
+          `Game ${gameSeed}: unexpected rejection "${result.error}" for action ${JSON.stringify(action)} at seat ${actor.seat}`,
+        );
+        break;
+      }
+      actionCount++;
+    }
+
+    if (finished) {
+      completed++;
+    } else {
+      timedOut++;
+    }
+  }
+
+  return {
+    games,
+    completed,
+    timedOut,
+    team0Wins,
+    team1Wins,
+    winRateTeam0: completed > 0 ? team0Wins / completed : 0,
+    errors,
+  };
+}
+
 // ---- Encontrar actor ------------------------------------------------
 
 interface Actor {

@@ -238,6 +238,8 @@ export interface MutableHandState {
 
 export interface PlayerView {
   readonly handNumber: number;
+  readonly mySeat: Seat;
+  readonly dealerSeat: Seat;
   readonly handCards: readonly Card[];
   readonly partnerCards?: readonly Card[] | undefined;
   readonly vira: Card;

@@ -11,6 +11,7 @@ import {
   isVazaComplete,
   nextVazaStarter,
   playInVaza,
+  resolveHandWinner,
   startVaza,
   viraIndex,
 } from "./hand.js";
@@ -532,35 +533,9 @@ interface HandResolution {
 }
 
 function checkHandResolved(h: MutableHandState): HandResolution | null {
-  let t0 = 0;
-  let t1 = 0;
-  for (const v of h.completedVazas) {
-    if (v.winner !== null) {
-      if (TEAMS[v.winner] === 0) t0++;
-      else t1++;
-    }
-  }
-
-  const n = h.completedVazas.length;
-
-  // 3 vazas → sempre resolve
-  if (n >= 3) {
-    if (t0 > t1) return { winner: 0, tentos: h.trucoValue };
-    if (t1 > t0) return { winner: 1, tentos: h.trucoValue };
-    // canga tripla → time do mão
-    return { winner: TEAMS[h.dealerSeat], tentos: h.trucoValue };
-  }
-
-  // 2 vazas → resolve se um time já venceu e o outro não
-  if (n === 2) {
-    if (t0 >= 1 && t1 === 0) return { winner: 0, tentos: h.trucoValue };
-    if (t1 >= 1 && t0 === 0) return { winner: 1, tentos: h.trucoValue };
-    // 1-1 ou 0-0 com duas cangas → precisa da 3ª
-    return null;
-  }
-
-  // 1 vaza → nunca resolve
-  return null;
+  const winner = resolveHandWinner(h.completedVazas, h.dealerSeat);
+  if (winner === null) return null;
+  return { winner, tentos: h.trucoValue };
 }
 
 // ---- Fim de partida -------------------------------------------------
@@ -601,6 +576,8 @@ function computePlayerView(m: Internal, seat: Seat): PlayerView {
   if (!h) {
     return {
       handNumber: m.handNumber,
+      mySeat: seat,
+      dealerSeat: m.dealerSeat,
       handCards: [],
       vira: { suit: "paus", rank: "4" },
       completedVazas: [],
@@ -625,6 +602,8 @@ function computePlayerView(m: Internal, seat: Seat): PlayerView {
 
   return {
     handNumber: m.handNumber,
+    mySeat: seat,
+    dealerSeat: h.dealerSeat,
     handCards,
     partnerCards,
     vira: deepCopyCard(h.vira),

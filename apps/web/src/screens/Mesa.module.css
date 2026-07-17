@@ -502,8 +502,8 @@
   display: flex;
   gap: 0.8rem;
   justify-content: center;
-  align-items: flex-end;
-  height: 96px;
+  align-items: flex-start;
+  min-height: 96px;
 }
 
 .handCardWrapper {
@@ -511,6 +511,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.cardControls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
 }
 
 .handCard {
@@ -568,16 +576,12 @@
 }
 
 .coverBtn {
-  position: absolute;
-  bottom: -42px;
-  left: 50%;
-  transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
-  border-radius: 10px;
-  padding: 2px 6px;
-  font-size: 0.65rem;
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.7rem;
   white-space: nowrap;
   cursor: pointer;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
@@ -587,7 +591,7 @@
 .coverBtn:hover {
   background: #7f8c8d;
   border-color: #bdc3c7;
-  transform: translateX(-50%) scale(1.08);
+  transform: scale(1.05);
 }
 
 /* ---- Action Area ---- */
@@ -840,7 +844,7 @@
   }
 
   .hand {
-    height: 110px;
+    min-height: 110px;
   }
 
   .actionArea {
