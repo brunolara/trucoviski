@@ -132,9 +132,6 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.ownerSessionId = client.sessionId;
     }
 
-    // Envia snapshot individual imediatamente.
-    this.sendSnapshot(client, seat, []);
-
     // Quarto ocupante (humano ou bot) → inicia partida, locka sala.
     if (this.occupied.size + this.botSeats.size === MAX_SEATS) {
       this.status = "playing";
@@ -142,6 +139,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.broadcastSnapshots([]);
       void this.lock();
       this.scheduleBotTurn();
+    } else {
+      // Ainda no lobby: notifica todos os presentes (novo jogador entrou).
+      this.broadcastSnapshots([]);
     }
   }
 

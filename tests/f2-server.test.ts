@@ -80,6 +80,24 @@ async function drainJoinSnapshots(clients: ConnectedClient[]): Promise<void> {
   }
 }
 
+/**
+ * Espera até a sala virar "playing" e drena todo o backlog de snapshots.
+ * Robusto ao número exato de broadcasts (cada join no lobby agora notifica
+ * todos os presentes — F5, corrige o botão "Preencher com Bots" sumido).
+ */
+async function waitPlayingAndDrain(clients: ConnectedClient[]): Promise<void> {
+  for (const c of clients) {
+    let snap = await syncAndWait(c);
+    let tries = 0;
+    while (snap.status !== "playing" && tries < 100) {
+      await new Promise((r) => setTimeout(r, 20));
+      snap = await syncAndWait(c);
+      tries++;
+    }
+    drainAll(c);
+  }
+}
+
 const SEED = 42;
 
 // ---- Suite de contrato (shared) --------------------------------------
@@ -197,11 +215,8 @@ describe("TrucoRoom (F2 slice 1)", () => {
 
     // Drena snapshots de onJoin (1 por cliente).
     await drainJoinSnapshots(allCc);
-    // Drena snapshots de broadcast (1 adicional para cada, depois do 4º).
-    for (const c of allCc) {
-      await waitForInQueue(c, "snapshot");
-    }
-    for (const c of allCc) drainAll(c);
+    // Espera a sala virar "playing" e drena o backlog de broadcasts.
+    await waitPlayingAndDrain(allCc);
     return allCc;
   }
 
@@ -270,11 +285,8 @@ describe("TrucoRoom (F2 slice 1)", () => {
       drainJoinSnapshots(c).then(() => c),
     );
 
-    // Drena broadcasts.
-    for (const c of allCc) {
-      await waitForInQueue(c, "snapshot");
-    }
-    for (const c of allCc) drainAll(c);
+    // Espera a sala virar "playing" e drena o backlog de broadcasts.
+    await waitPlayingAndDrain(allCc);
 
     // Joga ações válidas até o fim da partida. Além de cartas, resolve mão de
     // onze; sem isso a simulação pararia quando um time chegasse a 11 tentos.

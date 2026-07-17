@@ -193,6 +193,7 @@ const HOLD_MS: Partial<Record<GameEvent["type"], number>> = {
   trucoRaised: 1500,
   trucoAccepted: 1500,
   trucoRan: 1500,
+  surrendered: 1500,
   handFinished: 2000,
 };
 
@@ -201,7 +202,16 @@ const BANNER_PRIORITY: Partial<Record<GameEvent["type"], number>> = {
   trucoAccepted: 1,
   vazaCompleted: 2,
   trucoRan: 3,
+  surrendered: 3,
   handFinished: 4,
+};
+
+/** Rótulo do valor de truco pedido (Paulista: 3=Truco, 6=Seis, 9=Nove, 12=Doze). */
+const TRUCO_VALUE_NAME: Record<number, string> = {
+  3: "TRUCO",
+  6: "SEIS",
+  9: "NOVE",
+  12: "DOZE",
 };
 
 function seatTeam(seat: number): 0 | 1 {
@@ -250,7 +260,7 @@ function bannerForEvents(
         : { text: "Vaza empatada (canga)" };
     case "trucoRaised":
       return {
-        text: `${name(best.seat)} pediu TRUCO! Valendo ${best.pendingValue}`,
+        text: `${name(best.seat)} pediu ${TRUCO_VALUE_NAME[best.pendingValue] ?? best.pendingValue}! Valendo ${best.pendingValue}`,
         team: seatTeam(best.seat),
       };
     case "trucoAccepted":
@@ -258,6 +268,11 @@ function bannerForEvents(
     case "trucoRan":
       return {
         text: `${name(best.seat)} correu! +${best.tentos} tento(s)`,
+        team: best.winnerTeam,
+      };
+    case "surrendered":
+      return {
+        text: `${name(best.seat)} desistiu! +${best.tentos} tento(s)`,
         team: best.winnerTeam,
       };
     case "handFinished":
@@ -275,6 +290,9 @@ function bannerForEvents(
 export const useStore = create<StoreState>()((set, get) => {
   const snapshotQueue: SnapshotMessage[] = [];
   let processingQueue = false;
+  // Sessão local (setada de forma síncrona ao conectar, antes de qualquer
+  // snapshot enfileirado ser processado — evita a corrida com get().room).
+  let mySessionId: string | null = null;
 
   function applySnapshot(snap: SnapshotMessage): void {
     const prevView = get().view;
@@ -315,6 +333,8 @@ export const useStore = create<StoreState>()((set, get) => {
       events: snap.events ?? [],
       replayMetadata: snap.replayMetadata ?? null,
       nicknames,
+      roomOwnerSessionId: snap.ownerSessionId,
+      isOwner: mySessionId === snap.ownerSessionId,
       banner: bannerForEvents(snap.events, nicknames),
     });
 
@@ -345,19 +365,14 @@ export const useStore = create<StoreState>()((set, get) => {
    * Handlers de mensagem compartilhados entre createRoom e joinRoom (F4).
    */
   function registerRoomHandlers(room: Room): void {
+    mySessionId = room.sessionId;
+
     room.onMessage("snapshot", (snap: SnapshotMessage) => {
       get().handleSnapshot(snap);
     });
 
     room.onMessage("actionRejected", (msg: { error: string }) => {
       console.warn("Ação rejeitada:", msg.error);
-    });
-
-    room.onMessage("ownerInfo", (msg: { sessionId: string }) => {
-      set({
-        roomOwnerSessionId: msg.sessionId,
-        isOwner: room.sessionId === msg.sessionId,
-      });
     });
 
     // Handlers Sociais (F4)
@@ -563,7 +578,6 @@ export const useStore = create<StoreState>()((set, get) => {
           room,
           screen: "lobby",
           connecting: false,
-          isOwner: true,
         });
       } catch (err) {
         set({
@@ -597,7 +611,6 @@ export const useStore = create<StoreState>()((set, get) => {
           room,
           screen: "lobby",
           connecting: false,
-          isOwner: false,
         });
       } catch (err) {
         set({
@@ -662,6 +675,7 @@ export const useStore = create<StoreState>()((set, get) => {
       }
       snapshotQueue.length = 0;
       processingQueue = false;
+      mySessionId = null;
       clearSession();
       set({ ...initialState, screen: "home" });
     },
@@ -679,6 +693,7 @@ export const useStore = create<StoreState>()((set, get) => {
       }
       snapshotQueue.length = 0;
       processingQueue = false;
+      mySessionId = null;
       clearSession();
       set({ ...initialState });
     },

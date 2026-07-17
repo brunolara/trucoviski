@@ -44,6 +44,16 @@ function seatTeam(s: number): 0 | 1 {
   return s === 0 || s === 2 ? 0 : 1;
 }
 
+// ponytail: duplicado da sequência paulista (1→3→6→9→12); importar do
+// engine/ruleset se um 2º ruleset com sequência diferente surgir.
+const NEXT_TRUCO_VALUE: Record<number, number> = { 1: 3, 3: 6, 6: 9, 9: 12 };
+const TRUCO_RAISE_LABEL: Record<number, string> = {
+  3: "Truco!",
+  6: "Pedir Seis!",
+  9: "Pedir Nove!",
+  12: "Pedir Doze!",
+};
+
 const AVATARS = ["🤠", "👵", "🧔", "👩‍🌾"];
 
 const SEAT_POSITIONS = [
@@ -88,7 +98,6 @@ export function Mesa() {
 
   const myTeam = seat === 0 || seat === 2 ? 0 : 1;
 
-  const isMyTurn = view.legalActions.length > 0;
   const legalPlayCards = view.legalActions.filter((a) => a.type === "playCard");
   const legalPlayHidden = view.legalActions.filter(
     (a) => a.type === "playHiddenCard",
@@ -97,6 +106,12 @@ export function Mesa() {
   const elevenDecisions = view.legalActions.filter(
     (a) => a.type === "elevenDecision",
   );
+  const canSurrender = view.legalActions.some((a) => a.type === "surrender");
+  // surrender é sempre legal na fase playing sem truco pendente — não conta como "sua vez".
+  const isMyTurn =
+    legalPlayCards.length > 0 ||
+    legalPlayHidden.length > 0 ||
+    legalTrucoActions.length > 0;
 
   const turnSeat =
     view.currentVaza?.currentSeat ??
@@ -183,13 +198,29 @@ export function Mesa() {
             <div className={styles.playedCardsGrid}>
               {view.currentVaza.plays.map((c, absSeat) => {
                 const rel = getRelativeSeat(absSeat);
+                const isCovered = view.currentVaza!.covered[absSeat];
                 return (
                   <div
                     key={absSeat}
                     className={`${styles.playedCardWrapper} ${styles[`playPos${rel}`]}`}
                   >
                     <AnimatePresence mode="wait">
-                      {c ? (
+                      {isCovered ? (
+                        <motion.div
+                          className={styles.playedCard}
+                          initial={{ scale: 0.5 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 300,
+                            damping: 20,
+                          }}
+                          title="Carta coberta"
+                        >
+                          🂠
+                        </motion.div>
+                      ) : c ? (
                         <motion.div
                           className={styles.playedCard}
                           style={{ color: cardColor(c.suit) }}
@@ -413,8 +444,8 @@ export function Mesa() {
           }}
         >
           {view.trucoPendingTeam === myTeam
-            ? "Seu time pediu truco!"
-            : "Oponentes pediram truco!"}
+            ? `Seu time pediu ${view.trucoPendingValue}!`
+            : `Oponentes pediram ${view.trucoPendingValue}!`}
         </div>
       )}
 
@@ -576,6 +607,25 @@ export function Mesa() {
                   >
                     👁️
                   </button>
+                  {/* Carta coberta (a partir da 2ª vaza) */}
+                  {legalPlayHidden.some(
+                    (a) => a.type === "playHiddenCard" && a.cardIndex === i,
+                  ) && (
+                    <button
+                      className={styles.coverBtn}
+                      onClick={() => {
+                        const hiddenAction = legalPlayHidden.find(
+                          (a) =>
+                            a.type === "playHiddenCard" && a.cardIndex === i,
+                        );
+                        if (hiddenAction) dispatchAction(hiddenAction);
+                      }}
+                      title="Jogar esta carta coberta (nunca vence a vaza)"
+                      data-testid={`cover-card-btn-${i}`}
+                    >
+                      🂠 Virar
+                    </button>
+                  )}
                 </motion.div>
               ))}
         </div>
@@ -621,9 +671,17 @@ export function Mesa() {
             <div className={styles.trucoActions}>
               {legalTrucoActions.map((a, i) => {
                 const trucoAction = (a as { action: string }).action;
-                let label = trucoAction;
-                if (trucoAction === "raise") label = "Truco!";
-                if (trucoAction === "accept") label = "Aceitar";
+                let label: string = trucoAction;
+                if (trucoAction === "raise") {
+                  const base = view.trucoPendingValue ?? view.trucoValue;
+                  const next = NEXT_TRUCO_VALUE[base];
+                  label = next
+                    ? (TRUCO_RAISE_LABEL[next] ?? "Truco!")
+                    : "Truco!";
+                }
+                if (trucoAction === "accept") {
+                  label = `Aceitar (vale ${view.trucoPendingValue})`;
+                }
                 if (trucoAction === "run") label = "Correr";
                 return (
                   <button
@@ -677,6 +735,24 @@ export function Mesa() {
 
       {/* Footer */}
       <div className={styles.footer}>
+        {canSurrender && (
+          <button
+            className={styles.surrenderBtn}
+            data-testid="surrender-btn"
+            onClick={() => {
+              const surrenderAction = view.legalActions.find(
+                (a) => a.type === "surrender",
+              );
+              if (!surrenderAction) return;
+              const confirmed = window.confirm(
+                `Desistir da mão? O adversário ganha ${view.trucoValue} tento(s).`,
+              );
+              if (confirmed) dispatchAction(surrenderAction);
+            }}
+          >
+            Desistir da mão
+          </button>
+        )}
         <button className={styles.leaveBtn} onClick={goToHome}>
           Sair
         </button>
