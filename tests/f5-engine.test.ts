@@ -265,3 +265,115 @@ describe("F5: carta coberta fora do ferro", () => {
     );
   });
 });
+
+describe("F5: desistir da mão (surrender)", () => {
+  it("surrender awards the opponent team the current trucoValue (1)", () => {
+    const match = createMatch(paulista, 42);
+    expect(match.state().hand?.trucoValue).toBe(1);
+    const scoresBefore = match.state().scores;
+
+    const r = match.dispatch(0, { type: "surrender" });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      const surrendered = r.events.find((e) => e.type === "surrendered");
+      expect(surrendered).toEqual({
+        type: "surrendered",
+        seat: 0,
+        winnerTeam: 1,
+        tentos: 1,
+      });
+      const finished = r.events.find((e) => e.type === "handFinished");
+      expect(finished).toMatchObject({
+        type: "handFinished",
+        winnerTeam: 1,
+        tentos: 1,
+        reason: "surrender",
+      });
+    }
+    expect(match.state().scores[1]).toBe(scoresBefore[1]! + 1);
+  });
+
+  it("surrender with truco accepted at value 6 awards 6", () => {
+    const match = createMatch(paulista, 42);
+    match.dispatch(1, { type: "truco", action: "raise" });
+    match.dispatch(2, { type: "truco", action: "accept" });
+    match.dispatch(0, { type: "truco", action: "raise" });
+    match.dispatch(1, { type: "truco", action: "accept" });
+    expect(match.state().hand?.trucoValue).toBe(6);
+
+    const r = match.dispatch(2, { type: "surrender" });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      const surrendered = r.events.find((e) => e.type === "surrendered");
+      expect(surrendered).toMatchObject({ winnerTeam: 1, tentos: 6 });
+    }
+  });
+
+  it("surrender is rejected while a truco raise is pending", () => {
+    const match = createMatch(paulista, 42);
+    match.dispatch(1, { type: "truco", action: "raise" });
+    const r = match.dispatch(0, { type: "surrender" });
+    expect(r).toEqual({ success: false, error: "invalidPhase" });
+  });
+
+  it("surrender is accepted even out of turn", () => {
+    const match = createMatch(paulista, 42);
+    const currentSeat = (match.state().hand!.currentVaza?.currentSeat ??
+      match.state().hand!.nextStarter) as Seat;
+    const otherSeat = ((currentSeat + 1) % 4) as Seat;
+    const r = match.dispatch(otherSeat, { type: "surrender" });
+    expect(r.success).toBe(true);
+  });
+
+  it("surrender in mão de onze / ferro awards trucoValue 3", () => {
+    let found = false;
+    for (let seed = 0; seed < 300 && !found; seed++) {
+      const match = createMatch(paulista, seed);
+      let safety = 0;
+      while (
+        match.state().phase !== "matchFinished" &&
+        !(match.state().hand?.isElevenHand || match.state().hand?.isFerro) &&
+        safety < 500
+      ) {
+        let acted = false;
+        for (let s = 0; s < 4; s++) {
+          const view = match.playerView(s as Seat);
+          const action =
+            view.legalActions.find((a) => a.type === "playCard") ??
+            view.legalActions.find(
+              (a) => a.type === "truco" && a.action === "accept",
+            ) ??
+            view.legalActions.find((a) => a.type === "elevenDecision");
+          if (action) {
+            match.dispatch(s as Seat, action);
+            acted = true;
+            break;
+          }
+        }
+        if (!acted) break;
+        safety++;
+      }
+
+      // Resolve a decisão de mão de onze (se pendente) escolhendo "play".
+      for (let s = 0; s < 4; s++) {
+        const view = match.playerView(s as Seat);
+        const play = view.legalActions.find(
+          (a) => a.type === "elevenDecision" && a.decision === "play",
+        );
+        if (play) match.dispatch(s as Seat, play);
+      }
+
+      const h = match.state().hand;
+      if (h && (h.isElevenHand || h.isFerro) && h.trucoValue === 3) {
+        const r = match.dispatch(0, { type: "surrender" });
+        expect(r.success).toBe(true);
+        if (r.success) {
+          const surrendered = r.events.find((e) => e.type === "surrendered");
+          expect(surrendered).toMatchObject({ tentos: 3 });
+        }
+        found = true;
+      }
+    }
+    expect(found, "should find a seed reaching mão de onze/ferro").toBe(true);
+  });
+});

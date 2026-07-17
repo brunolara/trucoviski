@@ -219,5 +219,6 @@ export function decideHeuristicAction(view: PlayerView): Action | null {
     return playHiddenActions[0] ?? null;
   }
 
-  return actions[0] ?? null;
+  // O bot nunca desiste da mão nem cobre carta fora do ferro por conta própria.
+  return actions.find((a) => a.type !== "surrender") ?? null;
 }

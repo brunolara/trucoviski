@@ -41,7 +41,11 @@ export const TEAMS: Record<Seat, Team> = { 0: 0, 1: 1, 2: 0, 3: 1 };
 // ---- Ações do jogador ----------------------------------------------
 
 export type Action =
-  PlayCardAction | PlayHiddenCardAction | TrucoAction | ElevenDecisionAction;
+  | PlayCardAction
+  | PlayHiddenCardAction
+  | TrucoAction
+  | ElevenDecisionAction
+  | SurrenderAction;
 
 export interface PlayCardAction {
   readonly type: "playCard";
@@ -62,6 +66,11 @@ export interface TrucoAction {
 export interface ElevenDecisionAction {
   readonly type: "elevenDecision";
   readonly decision: "play" | "run";
+}
+
+/** Desistir da mão: qualquer jogador, a qualquer momento na fase playing sem truco pendente. */
+export interface SurrenderAction {
+  readonly type: "surrender";
 }
 
 // ---- Erros de ação (rejeição tipada, estado inalterado) ------------
@@ -89,6 +98,7 @@ export type GameEvent =
   | TrucoAcceptedEvent
   | TrucoRanEvent
   | ElevenDecidedEvent
+  | SurrenderedEvent
   | HandFinishedEvent
   | MatchFinishedEvent;
 
@@ -137,11 +147,18 @@ export interface ElevenDecidedEvent {
   readonly decision: "play" | "run";
 }
 
+export interface SurrenderedEvent {
+  readonly type: "surrendered";
+  readonly seat: Seat;
+  readonly winnerTeam: Team;
+  readonly tentos: number;
+}
+
 export interface HandFinishedEvent {
   readonly type: "handFinished";
   readonly winnerTeam: Team;
   readonly tentos: number;
-  readonly reason: "vazas" | "run";
+  readonly reason: "vazas" | "run" | "surrender";
 }
 
 export interface MatchFinishedEvent {

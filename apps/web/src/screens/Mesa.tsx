@@ -453,9 +453,9 @@ export function Mesa() {
               <div
                 key={si}
                 className={styles.miniCard}
-                style={{ color: cardColor(c.suit) }}
+                style={c ? { color: cardColor(c.suit) } : undefined}
               >
-                {cardLabel(c)}
+                {c ? cardLabel(c) : "?"}
               </div>
             ))}
           </div>

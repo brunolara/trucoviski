@@ -166,6 +166,36 @@ describe("Heuristic Bot Strategy (F4)", () => {
     });
   });
 
+  describe("surrender (F5)", () => {
+    it("never chooses surrender when playCard/playHiddenCard are also legal", () => {
+      const view: PlayerView = {
+        ...baseView,
+        handCards: [
+          { suit: "copas", rank: "3" },
+          { suit: "ouros", rank: "4" },
+        ],
+        legalActions: [
+          { type: "playCard", card: { suit: "copas", rank: "3" } },
+          { type: "playCard", card: { suit: "ouros", rank: "4" } },
+          { type: "playHiddenCard", cardIndex: 0 },
+          { type: "playHiddenCard", cardIndex: 1 },
+          { type: "surrender" },
+        ],
+      };
+      const action = decideHeuristicAction(view);
+      expect(action?.type).toBe("playCard");
+    });
+
+    it("never returns surrender even as the only remaining fallback", () => {
+      const view: PlayerView = {
+        ...baseView,
+        legalActions: [{ type: "surrender" }],
+      };
+      const action = decideHeuristicAction(view);
+      expect(action).toBeNull();
+    });
+  });
+
   describe("truco decisions", () => {
     it("accepts truco if we have a strong card", () => {
       const view: PlayerView = {

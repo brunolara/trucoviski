@@ -216,10 +216,37 @@ function doAction(m: Internal, seat: Seat, action: Action): ActionResult {
       return doPlayHiddenCard(m, h, seat, action.cardIndex);
     }
     if (action.type === "truco") return doTruco(m, h, seat, action.action);
+    if (action.type === "surrender") return doSurrender(m, h, seat);
     return { success: false, error: "invalidPhase" };
   }
 
   return { success: false, error: "invalidPhase" };
+}
+
+// ---- Desistir da mão --------------------------------------------------
+
+function doSurrender(
+  m: Internal,
+  h: MutableHandState,
+  seat: Seat,
+): ActionResult {
+  if (h.trucoPendingTeam !== null) {
+    return { success: false, error: "invalidPhase" };
+  }
+
+  const winner: Team = TEAMS[seat] === 0 ? 1 : 0;
+  const tentos = h.trucoValue;
+  h.finished = true;
+  m.phase = "handFinished";
+  m.scores[winner] = m.scores[winner]! + tentos;
+
+  return {
+    success: true,
+    events: [
+      { type: "surrendered", seat, winnerTeam: winner, tentos },
+      { type: "handFinished", winnerTeam: winner, tentos, reason: "surrender" },
+    ],
+  };
 }
 
 // ---- Decisão de onze ------------------------------------------------
@@ -691,6 +718,9 @@ function computeLegalActions(
       actions.push({ type: "truco", action: "raise" });
     }
   }
+
+  // Desistir da mão: qualquer jogador, a qualquer momento, sem truco pendente.
+  actions.push({ type: "surrender" });
 
   return actions;
 }

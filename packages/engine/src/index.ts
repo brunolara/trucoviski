@@ -26,6 +26,8 @@ export type {
   RuleSet,
   Seat,
   Suit,
+  SurrenderAction,
+  SurrenderedEvent,
   Team,
   TrucoAcceptedEvent,
   TrucoRaisedEvent,
