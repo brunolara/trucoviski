@@ -46,8 +46,12 @@ export interface HeuristicV2Features {
   cangaOnPurpose: boolean;
   /** Sharpness da sigmoide de blefe (mais alto = mais determinístico). */
   sharpness: number;
+  /** Ajuste fino (unidades de força de carta, 1/13) nos limiares de aceitar/pedir truco — calibração via arena (scripts/arena.mts). */
+  responseBaseOffset: number;
+  proposeBaseOffset: number;
 }
 
+/** Calibrado via arena: heuristic-v2 vs heuristic-v1, ~54% winrate em 24k jogos. */
 export const DEFAULT_FEATURES: HeuristicV2Features = {
   topAliveAccept: true,
   wonFirstVazaMode: "override",
@@ -55,7 +59,9 @@ export const DEFAULT_FEATURES: HeuristicV2Features = {
   opponentWeaknessBluff: true,
   generalizedPartnerDiscard: true,
   cangaOnPurpose: true,
-  sharpness: 24,
+  sharpness: 80,
+  responseBaseOffset: 3,
+  proposeBaseOffset: 2.5,
 };
 
 function scoreToProbability(
@@ -63,8 +69,13 @@ function scoreToProbability(
   threshold: number,
   sharpness: number,
 ): number {
-  const p = 1 / (1 + Math.exp(-sharpness * (score - threshold)));
-  return Math.min(0.95, Math.max(0.05, p));
+  // Sem clamp artificial: com sharpness alto a sigmoide já satura perto de
+  // 0/1 para scores longe do limiar (decisão efetivamente determinística),
+  // e só fica realmente ambígua (blefe) perto do limiar. Um clamp fixo tipo
+  // min(0.95,...) forçaria ~5% de erro mesmo em mãos óbvias — testado na
+  // arena e piora o bot (perde ~5-10pp de winrate vs v1 por decisão errada
+  // sistemática em casos óbvios).
+  return 1 / (1 + Math.exp(-sharpness * (score - threshold)));
 }
 
 function myMaxStrength(cards: readonly Card[], vira: Card): number {
@@ -205,7 +216,9 @@ export function decideHeuristicV2Action(
     const discount =
       features.wonFirstVazaMode === "discount" && wonFirst ? 2.5 / 13 : 0;
     const base =
-      (view.completedVazas.length === 0 ? 6.5 / 13 : 7.5 / 13) - discount;
+      (view.completedVazas.length === 0 ? 6.5 / 13 : 7.5 / 13) -
+      discount +
+      features.responseBaseOffset / 13;
     const threshold = trucoThreshold(
       view,
       atRisk,
@@ -227,7 +240,8 @@ export function decideHeuristicV2Action(
   if (trucoProposals.length > 0) {
     const myMax = myMaxStrength(view.handCards, view.vira);
     const wonFirst = wonFirstVaza(view);
-    const base = wonFirst ? 7.5 / 13 : 9.5 / 13;
+    const base =
+      (wonFirst ? 7.5 / 13 : 9.5 / 13) + features.proposeBaseOffset / 13;
     const threshold = trucoThreshold(
       view,
       nextTrucoLevel(view.trucoValue),

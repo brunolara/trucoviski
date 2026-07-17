@@ -28,7 +28,7 @@ function makePolicy(
     case "heuristic-v2":
       return (view) => decideHeuristicV2Action(view, rng);
     case "montecarlo":
-      return (view) => decideMonteCarloAction(view, { samples: 60, rng });
+      return (view) => decideMonteCarloAction(view, { rng });
   }
 }
 

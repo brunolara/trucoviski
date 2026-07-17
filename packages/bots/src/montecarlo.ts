@@ -44,7 +44,7 @@ import { cardKey, collectSeenCards, partnerSeatOf } from "./strength.js";
 export type RolloutPolicy = (view: PlayerView, rng: Rng) => Action | null;
 
 export interface MonteCarloOptions {
-  /** Amostras (determinizações) por ação candidata. Default: 80. */
+  /** Amostras (determinizações) por ação candidata. Default: 100. */
   samples?: number;
   rng?: Rng;
   /** Política usada para simular jogadas de todos os assentos no rollout. */
@@ -57,6 +57,14 @@ interface World {
   dealerSeat: Seat;
 }
 
+function cloneWorld(world: World): World {
+  return {
+    vira: world.vira,
+    dealerSeat: world.dealerSeat,
+    hands: world.hands.map((h) => [...h]) as [Card[], Card[], Card[], Card[]],
+  };
+}
+
 export function decideMonteCarloAction(
   view: PlayerView,
   opts: MonteCarloOptions = {},
@@ -66,9 +74,16 @@ export function decideMonteCarloAction(
   if (actions.length === 1) return actions[0]!;
 
   const rng = opts.rng ?? Math.random;
-  const samples = opts.samples ?? 80;
+  const samples = opts.samples ?? 100;
   const rolloutPolicy = opts.rolloutPolicy ?? decideHeuristicV2Action;
   const myTeam = TEAMS[view.mySeat];
+
+  // Números aleatórios comuns: as mesmas N determinizações são reusadas para
+  // todas as ações candidatas, então a comparação entre ações não é poluída
+  // por ruído de "mundos" diferentes — reduz muito a variância por amostra.
+  const worlds: World[] = [];
+  for (let s = 0; s < samples; s++)
+    worlds.push(sampleDeterminization(view, rng));
 
   let bestAction: Action = actions[0]!;
   let bestValue = -Infinity;
@@ -80,18 +95,17 @@ export function decideMonteCarloAction(
       value = shortcut;
     } else {
       let total = 0;
-      for (let s = 0; s < samples; s++) {
-        const world = sampleDeterminization(view, rng);
+      for (const world of worlds) {
         total += simulateAction(
           view,
-          world,
+          cloneWorld(world),
           action,
           myTeam,
           rolloutPolicy,
           rng,
         );
       }
-      value = total / samples;
+      value = total / worlds.length;
     }
     if (value > bestValue) {
       bestValue = value;
