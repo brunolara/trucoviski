@@ -132,11 +132,6 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.ownerSessionId = client.sessionId;
     }
 
-    // Envia ownerInfo para este cliente.
-    if (this.ownerSessionId) {
-      client.send("ownerInfo", { sessionId: this.ownerSessionId });
-    }
-
     // Envia snapshot individual imediatamente.
     this.sendSnapshot(client, seat, []);
 
@@ -162,6 +157,13 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       // Libera assento para próximo jogador.
       this.freeSeats.push(seat);
       this.freeSeats.sort((a, b) => a - b);
+
+      // Se o dono saiu, promove o humano mais antigo restante.
+      if (this.ownerSessionId === client.sessionId) {
+        const [nextOwner] = this.occupied.keys();
+        this.ownerSessionId = nextOwner ?? null;
+      }
+
       this.broadcastSnapshots([]);
       return;
     }
@@ -206,10 +208,6 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
         if (tomatoT) this.lastTomatoTime.set(newSessionId, tomatoT);
       }
 
-      // Envia ownerInfo e snapshot para o cliente reconectado
-      if (this.ownerSessionId) {
-        newClient.send("ownerInfo", { sessionId: this.ownerSessionId });
-      }
       this.sendSnapshot(newClient, seat, []);
     } catch {
       // Cliente não reconectou a tempo: fail-closed
@@ -294,6 +292,11 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     // Só no lobby (waiting).
     if (this.status !== "waiting") return;
 
+    // Normaliza assentos: humanos (na ordem em que entraram) ocupam os
+    // assentos mais baixos (0..N-1); bots preenchem o resto. Com 2 humanos
+    // isso garante 1 humano por time (times são 0/2 vs 1/3).
+    this.normalizeHumanSeats();
+
     const seatsToFill = [...this.freeSeats];
     if (seatsToFill.length === 0) return;
 
@@ -315,6 +318,25 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.scheduleBotTurn();
     } else {
       this.broadcastSnapshots([]);
+    }
+  }
+
+  /** Reatribui humanos aos assentos 0..N-1 (na ordem em que entraram). */
+  private normalizeHumanSeats(): void {
+    const humanEntries = [...this.occupied.entries()];
+
+    const newOccupied = new Map<string, number>();
+    const newNicknames = new Map<number, string>();
+    humanEntries.forEach(([sessionId, oldSeat], i) => {
+      newOccupied.set(sessionId, i);
+      newNicknames.set(i, this.nicknames.get(oldSeat) ?? `Jogador ${i + 1}`);
+    });
+
+    this.occupied = newOccupied;
+    this.nicknames = newNicknames;
+    this.freeSeats = [];
+    for (let s = humanEntries.length; s < MAX_SEATS; s++) {
+      this.freeSeats.push(s);
     }
   }
 
@@ -645,6 +667,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       seat,
       status: this.status,
       connectedPlayers,
+      ownerSessionId: this.ownerSessionId ?? "",
       metadata: {
         rulesetName: m.metadata.rulesetName,
         rulesetVersion: m.metadata.rulesetVersion,

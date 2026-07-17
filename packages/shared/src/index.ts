@@ -61,6 +61,8 @@ export interface SnapshotMessage {
   seat: number;
   status: "waiting" | "playing" | "finished";
   connectedPlayers: number;
+  /** sessionId do dono da sala (quem pode preencher com bots). */
+  ownerSessionId: string;
   /** Metadados públicos (sem seed) expostos em qualquer status. */
   metadata: {
     rulesetName: string;
@@ -81,13 +83,7 @@ export interface ActionRejectedMessage {
   error: WireError;
 }
 
-export interface OwnerInfoMessage {
-  type: "ownerInfo";
-  sessionId: string;
-}
-
-export type ServerMessage =
-  SnapshotMessage | ActionRejectedMessage | OwnerInfoMessage;
+export type ServerMessage = SnapshotMessage | ActionRejectedMessage;
 
 // ---- Validação runtime de setNickname (Zod 4, strict) -----------------
 
@@ -185,11 +181,16 @@ const elevenDecisionSchema = z.strictObject({
   decision: z.enum(["play", "run"]),
 });
 
+const surrenderSchema = z.strictObject({
+  type: z.literal("surrender"),
+});
+
 const actionSchema = z.discriminatedUnion("type", [
   playCardSchema,
   playHiddenCardSchema,
   trucoSchema,
   elevenDecisionSchema,
+  surrenderSchema,
 ]);
 
 /**

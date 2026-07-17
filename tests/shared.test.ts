@@ -4,8 +4,10 @@ import {
   validateEmote,
   validateThrowTomato,
   validateShowCard,
+  validateAction,
   EMOJI_WHITELIST,
 } from "../packages/shared/src/index.js";
+import type { SnapshotMessage } from "../packages/shared/src/index.js";
 
 describe("Shared social validators (F4)", () => {
   describe("validateChat", () => {
@@ -68,5 +70,39 @@ describe("Shared social validators (F4)", () => {
       expect(validateShowCard({ cardIndex: 1.5 })).toBeNull();
       expect(validateShowCard({})).toBeNull();
     });
+  });
+});
+
+describe("F5: validateAction surrender", () => {
+  it("accepts a valid surrender action", () => {
+    expect(validateAction({ type: "surrender" })).toEqual({
+      type: "surrender",
+    });
+  });
+
+  it("rejects surrender with extra fields (strict)", () => {
+    expect(validateAction({ type: "surrender", extra: 1 })).toBeNull();
+  });
+
+  it("rejects unknown action types", () => {
+    expect(validateAction({ type: "quit" })).toBeNull();
+  });
+});
+
+describe("F5: SnapshotMessage carries ownerSessionId", () => {
+  it("type allows an ownerSessionId string field", () => {
+    const snapshot: SnapshotMessage = {
+      type: "snapshot",
+      seat: 0,
+      status: "waiting",
+      connectedPlayers: 1,
+      ownerSessionId: "abc123",
+      metadata: {
+        rulesetName: "paulista",
+        rulesetVersion: "1.0.0",
+        prngVersion: "1",
+      },
+    };
+    expect(snapshot.ownerSessionId).toBe("abc123");
   });
 });

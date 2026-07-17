@@ -43,7 +43,6 @@ async function waitForInQueue(
 }
 
 async function drainJoinMessages(client: ConnectedClient): Promise<void> {
-  await waitForInQueue(client, "ownerInfo");
   await waitForInQueue(client, "snapshot");
 }
 

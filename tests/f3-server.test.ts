@@ -57,10 +57,9 @@ async function syncAndWait(client: ConnectedClient): Promise<SnapshotMessage> {
 }
 
 /**
- * Drena ownerInfo + snapshot de join para um cliente.
+ * Drena o snapshot de join para um cliente.
  */
 async function drainJoinMessages(client: ConnectedClient): Promise<void> {
-  await waitForInQueue(client, "ownerInfo");
   await waitForInQueue(client, "snapshot");
 }
 
@@ -142,6 +141,77 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     const snap = await syncAndWait(owner);
     expect(snap.status).toBe("playing");
     expect(snap.connectedPlayers).toBe(4);
+  });
+
+  it("F5: with 2 humans, fillBots seats them on opposite teams (1 bot per team)", async () => {
+    const room = await gameServer.createRoom("truco", { seed: SEED });
+    const owner = await connectWithQueue(gameServer, room, {
+      nickname: "Dono",
+    });
+    const other = await connectWithQueue(gameServer, room, {
+      nickname: "Outro",
+    });
+    await drainJoinMessages(owner);
+    await drainJoinMessages(other);
+
+    owner.raw.send("fillBots", {});
+    await new Promise((r) => setTimeout(r, 100));
+    drainAll(owner);
+    drainAll(other);
+
+    const ownerSnap = await syncAndWait(owner);
+    const otherSnap = await syncAndWait(other);
+
+    expect(ownerSnap.status).toBe("playing");
+    // Os 2 humanos ocupam os assentos 0 e 1 (times opostos: 0/2 vs 1/3).
+    expect([ownerSnap.seat, otherSnap.seat].sort()).toEqual([0, 1]);
+  });
+
+  it("F5: with 3 humans, fillBots seats the bot on seat 3", async () => {
+    const room = await gameServer.createRoom("truco", { seed: SEED });
+    const owner = await connectWithQueue(gameServer, room, {
+      nickname: "Dono",
+    });
+    const p2 = await connectWithQueue(gameServer, room, { nickname: "P2" });
+    const p3 = await connectWithQueue(gameServer, room, { nickname: "P3" });
+    await drainJoinMessages(owner);
+    await drainJoinMessages(p2);
+    await drainJoinMessages(p3);
+
+    owner.raw.send("fillBots", {});
+    await new Promise((r) => setTimeout(r, 100));
+    drainAll(owner);
+
+    const snap = await syncAndWait(owner);
+    expect(snap.status).toBe("playing");
+    const nicks = snap.nicknames!;
+    expect(nicks[3]?.startsWith("Bot")).toBe(true);
+  });
+
+  it("F5: owner is transferred to the next human when the owner leaves the lobby", async () => {
+    const room = await gameServer.createRoom("truco", { seed: SEED });
+    const owner = await connectWithQueue(gameServer, room, {
+      nickname: "Dono",
+    });
+    const other = await connectWithQueue(gameServer, room, {
+      nickname: "Outro",
+    });
+    await drainJoinMessages(owner);
+    await drainJoinMessages(other);
+
+    await owner.raw.leave(true);
+    await new Promise((r) => setTimeout(r, 200));
+    drainAll(other);
+
+    const snap = await syncAndWait(other);
+    expect(snap.ownerSessionId).toBe(other.raw.sessionId);
+
+    // O novo dono (other) agora pode preencher com bots.
+    other.raw.send("fillBots", {});
+    await new Promise((r) => setTimeout(r, 100));
+    drainAll(other);
+    const snap2 = await syncAndWait(other);
+    expect(snap2.status).toBe("playing");
   });
 
   it("nicknames include bot names after fillBots", async () => {
@@ -226,16 +296,14 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     ).toBe(true);
   }, 30000);
 
-  it("ownerInfo is sent to joining clients", async () => {
+  it("snapshot carries ownerSessionId for joining clients", async () => {
     const room = await gameServer.createRoom("truco", { seed: SEED });
     const owner = await connectWithQueue(gameServer, room, {
       nickname: "Dono",
     });
 
-    // Owner recebe ownerInfo.
-    const ownerInfo = await waitForInQueue(owner, "ownerInfo");
-    expect(ownerInfo).toBeDefined();
-    expect((ownerInfo as { sessionId: string }).sessionId).toBeTruthy();
+    const snap = (await waitForInQueue(owner, "snapshot")) as SnapshotMessage;
+    expect(snap.ownerSessionId).toBeTruthy();
   });
 
   it("setNickname rejects empty string (Zod min 1)", async () => {

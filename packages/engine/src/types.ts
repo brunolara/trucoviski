@@ -246,6 +246,7 @@ export interface PlayerView {
   readonly scores: readonly [number, number];
   readonly trucoValue: number;
   readonly trucoPendingTeam: Team | null;
+  readonly trucoPendingValue: number | null;
   readonly isElevenHand: boolean;
   readonly isFerro: boolean;
   readonly elevenDecision: "play" | "run" | null;
