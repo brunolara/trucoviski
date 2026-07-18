@@ -131,11 +131,19 @@ test.describe("F7: Pixel Art spritesheet", () => {
         await coverBtn.click({ force: true, timeout: 3000 }).catch(() => {});
       } else {
         // Joga carta visível (frente).
+        // No mobile, dblclick não dispara onTouchEnd — precisamos de dois
+        // taps rápidos (<300ms) para acionar handleCardTap no Mesa.tsx.
         const playCard = handCards.first();
         if (await playCard.isVisible().catch(() => false)) {
-          await playCard
-            .dblclick({ force: true, timeout: 3000 })
-            .catch(() => {});
+          const isMobile = (page.viewportSize()?.width ?? 9999) <= 414;
+          if (isMobile) {
+            await playCard.tap({ force: true, timeout: 3000 }).catch(() => {});
+            await playCard.tap({ force: true, timeout: 3000 }).catch(() => {});
+          } else {
+            await playCard
+              .dblclick({ force: true, timeout: 3000 })
+              .catch(() => {});
+          }
         }
       }
 

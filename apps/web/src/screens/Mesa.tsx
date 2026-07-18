@@ -48,9 +48,9 @@ const AVATARS = ["🤠", "👵", "🧔", "👩‍🌾"];
 
 const SEAT_POSITIONS = [
   { left: "50%", bottom: "4%" }, // Seat 0 (bottom) - Me
-  { right: "4%", top: "45%" }, // Seat 1 (right)
+  { right: "4%", top: "50%" }, // Seat 1 (right)
   { left: "50%", top: "4%" }, // Seat 2 (top) - Partner
-  { left: "4%", top: "45%" }, // Seat 3 (left)
+  { left: "4%", top: "50%" }, // Seat 3 (left)
 ];
 
 /* ---- Component ----------------------------------------------------- */
@@ -227,6 +227,18 @@ export function Mesa() {
 
       {/* Board area (circular 2D) */}
       <div className={styles.board}>
+        <img
+          className={styles.tableDecorationHat}
+          src="/assets/pixel/chapeu.png"
+          alt=""
+          aria-hidden="true"
+        />
+        <img
+          className={styles.tableDecorationGun}
+          src="/assets/pixel/arma.png"
+          alt=""
+          aria-hidden="true"
+        />
         {/* Table Center (Vira + Played Cards) */}
         <div className={styles.tableCenter}>
           {/* Vira card */}
