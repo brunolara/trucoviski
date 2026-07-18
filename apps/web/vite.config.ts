@@ -47,7 +47,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/ws": {
+      "/matchmake": {
+        target: "http://localhost:2568",
+      },
+      "/room": {
         target: "ws://localhost:2568",
         ws: true,
       },

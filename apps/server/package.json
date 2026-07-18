@@ -10,10 +10,16 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@colyseus/monitor": "0.17.8",
     "@trucoviski/bots": "workspace:*",
     "@trucoviski/engine": "workspace:*",
     "@trucoviski/shared": "workspace:*",
     "colyseus": "0.17.10",
+    "express": "5.2.1",
+    "pino": "^10.3.1",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6"
   }
 }

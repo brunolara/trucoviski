@@ -563,7 +563,7 @@ export const useStore = create<StoreState>()((set, get) => {
       set({ connecting: true, error: null });
 
       try {
-        const client = new Client(`ws://${window.location.hostname}:2568`);
+        const client = new Client(window.location.origin);
         const room = await client.create("truco", { nickname });
 
         // Registra handlers ANTES de atualizar o estado para não perder mensagens iniciais
@@ -596,7 +596,7 @@ export const useStore = create<StoreState>()((set, get) => {
       set({ connecting: true, error: null });
 
       try {
-        const client = new Client(`ws://${window.location.hostname}:2568`);
+        const client = new Client(window.location.origin);
         const room = await client.joinById(roomId, { nickname });
 
         // Registra handlers ANTES de atualizar o estado para não perder mensagens iniciais
@@ -705,7 +705,7 @@ export const useStore = create<StoreState>()((set, get) => {
 
       if (session) {
         try {
-          const client = new Client(`ws://${window.location.hostname}:2568`);
+          const client = new Client(window.location.origin);
           const room = await client.reconnect(session.reconnectionToken);
           registerRoomHandlers(room);
           room.send("sync", {});
@@ -723,7 +723,7 @@ export const useStore = create<StoreState>()((set, get) => {
         }
 
         try {
-          const client = new Client(`ws://${window.location.hostname}:2568`);
+          const client = new Client(window.location.origin);
           const room = await client.joinById(session.roomId, {
             nickname: session.nickname,
           });

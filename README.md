@@ -23,6 +23,10 @@ pnpm gate
 - `pnpm sim -- --games N`: simulação de N jogos aleatórios com políticas legais
   (default 1000).
 - `pnpm validate:compose`: valida `compose.yaml`; requer Docker Compose.
+- `bash scripts/smoke-deploy.sh https://dominio`: smoke pós-deploy (cliente,
+  saúde e proteção do monitor).
+- `bash scripts/backup-sqlite.sh`: backup consistente do SQLite no volume da
+  VPS; consulte `docs/f6-operations.md`.
 - `cd apps/web && pnpm dev`: frontend Vite em http://localhost:5173.
 - `cd apps/server && pnpm dev`: servidor Colyseus em ws://localhost:2568.
 

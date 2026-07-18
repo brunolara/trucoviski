@@ -17,6 +17,7 @@ import {
 } from "@trucoviski/shared";
 import type { SnapshotMessage, WireError } from "@trucoviski/shared";
 import { decideBotAction } from "@trucoviski/bots";
+import { logger } from "./logger.js";
 
 // ---- Constantes ------------------------------------------------------
 
@@ -178,7 +179,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.clearBotTimer();
       queueMicrotask(() => {
         void this.disconnect().catch((error: unknown) => {
-          console.error("Failed to close TrucoRoom after player left", error);
+          logger.error(error, "Failed to close TrucoRoom after player left");
         });
       });
       return;
@@ -219,9 +220,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.clearBotTimer();
       queueMicrotask(() => {
         void this.disconnect().catch((error: unknown) => {
-          console.error(
-            "Failed to close TrucoRoom after reconnect timeout",
+          logger.error(
             error,
+            "Failed to close TrucoRoom after reconnect timeout",
           );
         });
       });
@@ -361,7 +362,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     const now = Date.now();
     const last = this.lastChatTime.get(client.sessionId) ?? 0;
     if (now - last < 2000) {
-      console.warn(`Chat rate limit hit for seat ${seat}`);
+      logger.warn({ seat }, "Chat rate limit hit");
       return;
     }
 
@@ -380,7 +381,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     const now = Date.now();
     const last = this.lastEmoteTime.get(client.sessionId) ?? 0;
     if (now - last < 1500) {
-      console.warn(`Emote rate limit hit for seat ${seat}`);
+      logger.warn({ seat }, "Emote rate limit hit");
       return;
     }
 
@@ -399,7 +400,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     const now = Date.now();
     const last = this.lastTomatoTime.get(client.sessionId) ?? 0;
     if (now - last < 3000) {
-      console.warn(`Tomato rate limit hit for seat ${seat}`);
+      logger.warn({ seat }, "Tomato rate limit hit");
       return;
     }
 

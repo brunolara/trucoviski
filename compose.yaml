@@ -1,4 +1,55 @@
 name: trucoviski2
 
-# F0 defines deployment structure only. Services arrive with their owning phase.
-services: {}
+services:
+  server:
+    build:
+      context: .
+      target: server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "2568"
+      SQLITE_PATH: ${SQLITE_PATH:-/data/trucoviski.sqlite}
+    volumes:
+      - server-data:/data
+    expose:
+      - "2568"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:2568/healthz').then((response) =>
+          process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  caddy:
+    build:
+      context: .
+      target: caddy
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      CADDY_DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      MONITOR_USER: ${MONITOR_USER:?set MONITOR_USER in .env}
+      MONITOR_PASSWORD_HASH:
+        ${MONITOR_PASSWORD_HASH:?set MONITOR_PASSWORD_HASH in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:
+  server-data:
