@@ -1,64 +1,85 @@
 /* ------------------------------------------------------------------ */
-/*  Teste E2E: F5 - Queda de rede e reconexão                         */
+/*  Testes E2E: F5 - PWA e queda de rede                              */
 /* ------------------------------------------------------------------ */
 
 import { test, expect } from "@playwright/test";
 
-test.describe("F5 - Reconexão", () => {
-  test("reconecta após queda de rede de 5s e preserva estado", async ({
+test.describe("F5 - PWA e reconexão", () => {
+  test("publica manifest e service worker que controla a página", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    const manifestHref = await page
+      .locator('link[rel="manifest"]')
+      .getAttribute("href");
+    expect(manifestHref).toBeTruthy();
+    if (!manifestHref) throw new Error("PWA manifest link is missing");
+
+    const manifest = await page.request.get(manifestHref);
+    expect(manifest.ok()).toBe(true);
+    expect(await manifest.json()).toEqual(
+      expect.objectContaining({ name: "Trucoviski", display: "standalone" }),
+    );
+
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    await expect
+      .poll(() =>
+        page.evaluate(() => navigator.serviceWorker.controller !== null),
+      )
+      .toBe(true);
+  });
+
+  test("reconecta após queda de rede de 5s e preserva a mão", async ({
     browser,
   }) => {
     test.setTimeout(90000);
-    const context = await browser.newContext();
+    const context = await browser.newContext({ serviceWorkers: "allow" });
     const page = await context.newPage();
-    page.on("console", (msg) => console.log("BROWSER:", msg.text()));
 
-    // 1. Criar sala e preencher com bots
-    await page.goto("/");
-    const nicknameInput = page.locator('[data-testid="nickname-input"]');
-    await expect(nicknameInput).toBeVisible();
-    await nicknameInput.fill("Jogador1");
-    await page.locator('[data-testid="create-room-btn"]').click();
+    try {
+      await page.goto("/");
+      const nicknameInput = page.getByTestId("nickname-input");
+      await expect(nicknameInput).toBeVisible();
+      await nicknameInput.fill("Jogador1");
+      await page.getByTestId("create-room-btn").click();
 
-    await expect(page.locator('[data-testid="lobby-screen"]')).toBeVisible({
-      timeout: 10000,
-    });
-    await page.locator('[data-testid="fill-bots-btn"]').click();
+      await expect(page.getByTestId("lobby-screen")).toBeVisible({
+        timeout: 10000,
+      });
+      await page.getByTestId("fill-bots-btn").click();
 
-    // Aguarda a mesa e as cartas
-    const mesaScreen = page.locator('[data-testid="mesa-screen"]');
-    await expect(mesaScreen).toBeVisible({ timeout: 15000 });
-    const handCards = page.locator('[data-testid^="hand-card-"]');
-    await expect(handCards.first()).toBeVisible({ timeout: 15000 });
+      const mesaScreen = page.getByTestId("mesa-screen");
+      await expect(mesaScreen).toBeVisible({ timeout: 15000 });
+      const handCards = page.locator('[data-testid^="hand-card-"]');
+      await expect(handCards.first()).toBeVisible({ timeout: 15000 });
 
-    // Captura placar atual
-    const scoreboard = page.locator('[data-testid="scoreboard"]');
-    await expect(scoreboard).toBeVisible();
-    const scoreTextAntes = await scoreboard.textContent();
+      const roomId = await mesaScreen.getAttribute("data-room-id");
+      expect(roomId).toBeTruthy();
+      if (!roomId) throw new Error("Mesa is missing its room id");
+      const privateCardsBefore = await handCards.allTextContents();
+      expect(privateCardsBefore).toHaveLength(3);
 
-    // Colyseus requires the room to be up for at least 5000ms before allowing reconnects
-    await page.waitForTimeout(6000);
+      // Colyseus só aceita a reserva de reconexão após cinco segundos.
+      await page.waitForTimeout(6000);
+      await context.setOffline(true);
+      await page.evaluate(() => window.dispatchEvent(new Event("offline")));
 
-    // 2. Simular queda de rede
-    await context.setOffline(true);
+      const reconnectingOverlay = page.getByTestId("reconnecting-overlay");
+      await expect(reconnectingOverlay).toBeVisible({ timeout: 10000 });
+      await page.waitForTimeout(5000);
 
-    // Deve mostrar "Reconectando..." (a check de visibilidade exata pode ser flaky durante a queda do websocket)
-    const reconnectingOverlay = page.locator('text="Reconectando..."');
+      await context.setOffline(false);
+      await page.evaluate(() => window.dispatchEvent(new Event("online")));
 
-    // Esperar 5s
-    await page.waitForTimeout(5000);
-
-    // 3. Voltar rede
-    await context.setOffline(false);
-
-    // 4. Verificar se a tela da mesa volta e as cartas continuam lá
-    await expect(reconnectingOverlay).toBeHidden({ timeout: 20000 });
-    await expect(mesaScreen).toBeVisible({ timeout: 15000 });
-
-    // Verifica placar inalterado (garante que não iniciou do zero)
-    const scoreTextDepois = await scoreboard.textContent();
-    expect(scoreTextDepois).toBe(scoreTextAntes);
-
-    await context.close();
+      await expect(reconnectingOverlay).toBeHidden({ timeout: 20000 });
+      await expect(mesaScreen).toBeVisible({ timeout: 15000 });
+      await expect(mesaScreen).toHaveAttribute("data-room-id", roomId);
+      await expect(handCards).toHaveCount(3);
+      expect(await handCards.allTextContents()).toEqual(privateCardsBefore);
+    } finally {
+      await context.close();
+    }
   });
 });

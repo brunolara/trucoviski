@@ -32,63 +32,30 @@ async function getScores(page: Page): Promise<[number, number] | null> {
  * Helper: Tenta jogar uma carta se for a vez do jogador
  */
 async function tryPlayCard(page: Page): Promise<boolean> {
-  try {
-    // Verifica se há botões de jogar carta visíveis
-    const playButtons = page.locator('[data-testid^="play-card-btn-"]');
-    const count = await playButtons.count({ timeout: 1000 });
-
-    if (count > 0) {
-      // Clica no primeiro botão de carta disponível
-      await playButtons.first().click();
-      return true;
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
+  const playButton = page.locator('[data-testid^="play-card-btn-"]').first();
+  if (!(await playButton.isVisible())) return false;
+  await playButton.click({ force: true, timeout: 3000 });
+  return true;
 }
 
 /**
  * Helper: Tenta decidir mão de onze se estiver visível
  */
 async function tryDecideEleven(page: Page): Promise<boolean> {
-  try {
-    const elevenBox = page.locator('[data-testid="eleven-decision-box"]');
-    const isVisible = await elevenBox.isVisible({ timeout: 1000 });
-
-    if (isVisible) {
-      // Sempre joga (decisão mais simples para teste)
-      const playBtn = page.locator('[data-testid="eleven-play-btn"]');
-      await playBtn.click();
-      return true;
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
+  const playBtn = page.getByTestId("eleven-play-btn");
+  if (!(await playBtn.isVisible())) return false;
+  await playBtn.click({ force: true, timeout: 3000 });
+  return true;
 }
 
 /**
  * Helper: Tenta responder truco se estiver visível
  */
 async function tryRespondTruco(page: Page): Promise<boolean> {
-  try {
-    // Verifica se há botões de truco (accept ou run)
-    const acceptBtn = page.locator('[data-testid="truco-accept-btn"]');
-    const isVisible = await acceptBtn.isVisible({ timeout: 1000 });
-
-    if (isVisible) {
-      // Aceita o truco
-      await acceptBtn.click();
-      return true;
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
+  const acceptBtn = page.getByTestId("truco-accept-btn");
+  if (!(await acceptBtn.isVisible())) return false;
+  await acceptBtn.click({ force: true, timeout: 3000 });
+  return true;
 }
 
 test.describe("Partida com 4 humanos", () => {
@@ -173,7 +140,7 @@ test.describe("Partida com 4 humanos", () => {
           await tryPlayCard(page);
 
           // Pequena pausa entre ações
-          await page.waitForTimeout(500);
+          await page.waitForTimeout(250);
         }
 
         // Verifica se o score mudou
@@ -188,7 +155,7 @@ test.describe("Partida com 4 humanos", () => {
         }
 
         // Pausa entre iterações
-        await pages[0].waitForTimeout(1000);
+        await pages[0].waitForTimeout(500);
       }
 
       // Verifica que o score mudou (mão completada)

@@ -31,43 +31,38 @@ test.describe("Mesa Social & Juice Features (F4)", () => {
     });
 
     // 5. Test Chat Message
-    const chatInput = page.locator('input[placeholder="Digite provocação..."]');
+    const chatInput = page.getByTestId("chat-input");
     await expect(chatInput).toBeVisible();
     await chatInput.fill("Truco neles!");
-    const chatSubmit = page.locator('button[type="submit"]');
+    const chatSubmit = page.getByTestId("chat-submit-btn");
     await chatSubmit.click();
 
-    // Verify chat bubble is visible on player's seat (relative seat 0)
-    await expect(page.locator("text=Truco neles!")).toBeVisible();
+    // O broadcast voltou para o assento do emissor, não apenas para o input.
+    await expect(page.getByTestId("chat-bubble-0")).toHaveText("Truco neles!");
 
     // 6. Test Emote
-    const emojiBtn = page.locator("text=👍");
+    const emojiBtn = page.getByTestId("emoji-btn-👍");
     await emojiBtn.click();
 
-    // Verify emoji bubble is visible
-    await expect(page.locator("text=👍")).toBeVisible();
+    // O emoji exibido é o resultado do evento recebido pelo servidor.
+    await expect(page.getByTestId("emote-bubble-0")).toHaveText("👍");
 
     // 7. Test Tomato Throwing
-    // Locate tomato throw button on one of the other players (seat 1, 2, or 3)
-    const tomatoBtns = page.locator('button[title^="Jogar tomate em"]');
-    const count = await tomatoBtns.count();
-    expect(count).toBeGreaterThan(0);
-    await tomatoBtns.first().click();
+    await page.getByTestId("tomato-btn-1").click();
 
-    // Verify active tomato element or splat element appears
-    const tomatoEffect = page.locator(`div[class*="tomatoEffect"]`);
+    const tomatoEffect = page.getByTestId("tomato-effect");
     await expect(tomatoEffect).toBeVisible();
 
     // 8. Test Show Card (teasing)
-    // Reveal button (eye icon) is present for cards in hand
-    const revealBtns = page.locator(
-      'button[title="Mostrar/provocar oponente com esta carta"]',
-    );
-    const cardsCount = await revealBtns.count();
-    if (cardsCount > 0) {
-      await revealBtns.first().click();
-      // Verify shown card bubble is visible
-      await expect(page.locator("text=Mostrou:")).toBeVisible();
-    }
+    // A mão inicial tem três cartas; o valor mostrado deve ser a carta enviada.
+    const firstCard = page.getByTestId("hand-card-0");
+    const cardLabel = (await firstCard.textContent())?.trim();
+    expect(cardLabel).toBeTruthy();
+    if (!cardLabel) throw new Error("Initial private card is missing a label");
+    await page.getByTestId("show-card-btn-0").click();
+    const shownCard = page.getByTestId("shown-card-bubble-0");
+    await expect(shownCard).toBeVisible();
+    await expect(shownCard).toContainText("Mostrou:");
+    await expect(shownCard).toContainText(cardLabel);
   });
 });

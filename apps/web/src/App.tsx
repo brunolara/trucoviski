@@ -9,6 +9,7 @@ export function App() {
   const screen = useStore((s) => s.screen);
   const reconnecting = useStore((s) => s.reconnecting);
   const boot = useStore((s) => s.boot);
+  const setReconnecting = useStore((s) => s.setReconnecting);
   const booted = useRef(false);
 
   useEffect(() => {
@@ -16,6 +17,17 @@ export function App() {
     booted.current = true;
     void boot();
   }, [boot]);
+
+  useEffect(() => {
+    const showReconnect = () => setReconnecting(true);
+    const hideReconnect = () => setReconnecting(false);
+    window.addEventListener("offline", showReconnect);
+    window.addEventListener("online", hideReconnect);
+    return () => {
+      window.removeEventListener("offline", showReconnect);
+      window.removeEventListener("online", hideReconnect);
+    };
+  }, [setReconnecting]);
 
   return (
     <>
@@ -33,6 +45,7 @@ export function App() {
             fontSize: "1.5rem",
             fontWeight: "bold",
           }}
+          data-testid="reconnecting-overlay"
         >
           Reconectando...
         </div>

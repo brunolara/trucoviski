@@ -32,6 +32,7 @@ export function Lobby() {
             <div
               key={s}
               className={`${styles.seat} ${s === seat ? styles.mySeat : ""}`}
+              data-testid={`lobby-seat-${s}`}
             >
               <span className={styles.seatNum}>S{s + 1}</span>
               <span className={styles.seatName}>

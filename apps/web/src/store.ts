@@ -17,6 +17,7 @@ import { sounds } from "./utils/sounds.js";
 // ---- Session persistence (F: sobreviver ao F5) -----------------------
 
 const SESSION_KEY = "trucoviski.session";
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || window.location.origin;
 
 interface SavedSession {
   reconnectionToken: string;
@@ -131,6 +132,7 @@ export interface StoreState {
   setNickname: (name: string) => void;
   setRoomId: (id: string) => void;
   setConnecting: (v: boolean) => void;
+  setReconnecting: (v: boolean) => void;
   setError: (msg: string | null) => void;
   createRoom: () => Promise<void>;
   joinRoom: () => Promise<void>;
@@ -550,6 +552,10 @@ export const useStore = create<StoreState>()((set, get) => {
       set({ connecting: v });
     },
 
+    setReconnecting(v) {
+      set({ reconnecting: v });
+    },
+
     setError(msg) {
       set({ error: msg, connecting: false });
     },
@@ -563,7 +569,7 @@ export const useStore = create<StoreState>()((set, get) => {
       set({ connecting: true, error: null });
 
       try {
-        const client = new Client(window.location.origin);
+        const client = new Client(SERVER_URL);
         const room = await client.create("truco", { nickname });
 
         // Registra handlers ANTES de atualizar o estado para não perder mensagens iniciais
@@ -596,7 +602,7 @@ export const useStore = create<StoreState>()((set, get) => {
       set({ connecting: true, error: null });
 
       try {
-        const client = new Client(window.location.origin);
+        const client = new Client(SERVER_URL);
         const room = await client.joinById(roomId, { nickname });
 
         // Registra handlers ANTES de atualizar o estado para não perder mensagens iniciais
@@ -705,7 +711,7 @@ export const useStore = create<StoreState>()((set, get) => {
 
       if (session) {
         try {
-          const client = new Client(window.location.origin);
+          const client = new Client(SERVER_URL);
           const room = await client.reconnect(session.reconnectionToken);
           registerRoomHandlers(room);
           room.send("sync", {});
@@ -723,7 +729,7 @@ export const useStore = create<StoreState>()((set, get) => {
         }
 
         try {
-          const client = new Client(window.location.origin);
+          const client = new Client(SERVER_URL);
           const room = await client.joinById(session.roomId, {
             nickname: session.nickname,
           });

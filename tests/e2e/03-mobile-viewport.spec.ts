@@ -5,17 +5,15 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Mobile viewport", () => {
-  test("viewport 390px permanece utilizável", async ({ page }) => {
+  test("viewport mobile permanece utilizável", async ({ page }, testInfo) => {
     test.setTimeout(90000); // 90 segundos
-
-    // Configura viewport mobile (390px de largura)
-    await page.setViewportSize({ width: 390, height: 844 }); // iPhone 12/13/14
+    test.skip(!testInfo.project.name.startsWith("mobile-"));
 
     // Navega para a home
     await page.goto("/");
 
     // Verifica que a home é visível e utilizável
-    const title = page.locator("h1:has-text('Truco Paulista')");
+    const title = page.getByRole("heading", { name: "Truco Paulista" });
     await expect(title).toBeVisible();
 
     // Preenche nickname primeiro (botão só habilita após preencher)
@@ -46,11 +44,11 @@ test.describe("Mobile viewport", () => {
     });
 
     // Verifica que o lobby é utilizável em mobile
-    const lobbyTitle = page.locator("h2:has-text('Sala de Espera')");
+    const lobbyTitle = page.getByRole("heading", { name: "Sala de Espera" });
     await expect(lobbyTitle).toBeVisible();
 
     // Verifica que os assentos são visíveis
-    const seats = page.locator('[class*="seat"]');
+    const seats = page.locator('[data-testid^="lobby-seat-"]');
     await expect(seats.first()).toBeVisible();
 
     // Verifica que o botão de preencher com bots é visível
@@ -74,13 +72,30 @@ test.describe("Mobile viewport", () => {
     const mesaScreen = page.locator('[data-testid="mesa-screen"]');
     await expect(mesaScreen).toBeVisible({ timeout: 10000 });
 
-    // Verifica que as cartas são visíveis e não estão cortadas
+    // As cartas e os controles touch permanecem inteiros no viewport do device.
     const handCards = page.locator('[data-testid^="hand-card-"]');
     await expect(handCards.first()).toBeVisible({ timeout: 10000 });
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    if (!viewport) throw new Error("Mobile project must define a viewport");
+    for (const card of await handCards.all()) {
+      const box = await card.boundingBox();
+      expect(box).not.toBeNull();
+      if (!box) throw new Error("Visible card has no bounding box");
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+    }
+
+    const touchControl = page.getByTestId("emoji-btn-👍");
+    await expect(touchControl).toBeVisible();
+    await touchControl.tap();
+    await expect(page.getByTestId("emote-bubble-0")).toHaveText("👍");
 
     // Verifica que não há overflow horizontal (scroll horizontal)
     const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
-    const viewportWidth = page.viewportSize()?.width ?? 390;
+    const viewportWidth = viewport.width;
     expect(bodyWidth).toBeLessThanOrEqual(viewportWidth + 10); // Margem de 10px para arredondamento
 
     // Verifica que o placar é visível

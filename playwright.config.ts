@@ -1,7 +1,24 @@
 import { defineConfig, devices } from "@playwright/test";
+import { readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+function hasInstalledWebKit(): boolean {
+  try {
+    return readdirSync(join(homedir(), ".cache", "ms-playwright")).some(
+      (name) => name.startsWith("webkit-"),
+    );
+  } catch {
+    return false;
+  }
+}
+
+const webkitAvailable = hasInstalledWebKit();
 
 /**
- * Configuração Playwright para testes E2E da F3.
+ * Configuração Playwright para testes E2E das F3–F5.
+ * O WebKit só entra quando o binário já está instalado; `test:e2e` continua
+ * executável em ambientes de CI locais que têm apenas Chromium.
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
@@ -10,7 +27,7 @@ export default defineConfig({
   forbidOnly: !!process.env["CI"],
   retries: process.env["CI"] ? 2 : 0,
   workers: 1, // Um worker para evitar conflitos de servidor
-  reporter: "html",
+  reporter: process.env["CI"] ? "list" : "html",
   use: {
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",
@@ -26,18 +43,27 @@ export default defineConfig({
       name: "mobile-chromium",
       use: { ...devices["Pixel 5"] },
     },
+    ...(webkitAvailable
+      ? [
+          {
+            name: "mobile-webkit",
+            use: { ...devices["iPhone 13"], browserName: "webkit" as const },
+          },
+        ]
+      : []),
   ],
 
   webServer: [
     {
       command: "pnpm --filter @trucoviski/server dev",
-      port: 2568,
+      url: "http://127.0.0.1:2568/healthz",
       reuseExistingServer: !process.env["CI"],
       timeout: 120 * 1000,
     },
     {
-      command: "pnpm --filter @trucoviski/web dev",
-      port: 5173,
+      command:
+        "VITE_SERVER_URL=http://127.0.0.1:2568 pnpm --filter @trucoviski/web dev",
+      url: "http://localhost:5173",
       reuseExistingServer: !process.env["CI"],
       timeout: 120 * 1000,
     },

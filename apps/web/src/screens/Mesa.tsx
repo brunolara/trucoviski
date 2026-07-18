@@ -67,6 +67,7 @@ const SEAT_POSITIONS = [
 
 export function Mesa() {
   const screen = useStore((s) => s.screen);
+  const room = useStore((s) => s.room);
   const seat = useStore((s) => s.seat);
   const view = useStore((s) => s.view);
   const scores = view?.scores ?? [0, 0];
@@ -133,7 +134,11 @@ export function Mesa() {
   const relativeSeatsOrder = [0, 1, 2, 3];
 
   return (
-    <div className={styles.screen} data-testid="mesa-screen">
+    <div
+      className={styles.screen}
+      data-testid="mesa-screen"
+      data-room-id={room?.roomId ?? ""}
+    >
       {/* Top bar */}
       <div className={styles.topBar}>
         <div className={styles.scores} data-testid="scoreboard">
@@ -276,6 +281,7 @@ export function Mesa() {
             <div
               key={relSeat}
               className={`${styles.seat} ${styles[`seat${relSeat}`]}`}
+              data-testid={`seat-${absSeat}`}
               style={{
                 position: "absolute",
                 left: pos.left,
@@ -302,6 +308,7 @@ export function Mesa() {
                     className={styles.tomatoBtn}
                     onClick={() => throwTomato(absSeat)}
                     title={`Jogar tomate em ${name}`}
+                    data-testid={`tomato-btn-${absSeat}`}
                   >
                     🍅
                   </button>
@@ -318,6 +325,7 @@ export function Mesa() {
                 {chat && (
                   <motion.div
                     className={styles.chatBubble}
+                    data-testid={`chat-bubble-${absSeat}`}
                     initial={{ opacity: 0, scale: 0.7 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.7 }}
@@ -332,6 +340,7 @@ export function Mesa() {
                 {emote && (
                   <motion.div
                     className={styles.emoteBubble}
+                    data-testid={`emote-bubble-${absSeat}`}
                     initial={{ opacity: 0, y: 10, scale: 0.5 }}
                     animate={{ opacity: 1, y: -20, scale: 1.5 }}
                     exit={{ opacity: 0, scale: 0.5 }}
@@ -347,6 +356,7 @@ export function Mesa() {
                 {shown && (
                   <motion.div
                     className={styles.shownCardBubble}
+                    data-testid={`shown-card-bubble-${absSeat}`}
                     initial={{ opacity: 0, scale: 0.5 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.5 }}
@@ -393,6 +403,7 @@ export function Mesa() {
             return (
               <motion.div
                 className={styles.tomatoEffect}
+                data-testid="tomato-effect"
                 initial={{
                   left: fromPos.left || "auto",
                   top: fromPos.top || "auto",
@@ -666,6 +677,7 @@ export function Mesa() {
                     className={styles.revealBtn}
                     onClick={() => showCard(i)}
                     title="Mostrar/provocar oponente com esta carta"
+                    data-testid={`show-card-btn-${i}`}
                   >
                     👁️
                   </button>
@@ -724,6 +736,7 @@ export function Mesa() {
               key={emoji}
               className={styles.emojiBtn}
               onClick={() => sendEmote(emoji)}
+              data-testid={`emoji-btn-${emoji}`}
             >
               {emoji}
             </button>
@@ -737,8 +750,13 @@ export function Mesa() {
             onChange={(e) => setChatInput(e.target.value)}
             placeholder="Digite provocação..."
             maxLength={120}
+            data-testid="chat-input"
           />
-          <button type="submit" className={styles.chatSubmitBtn}>
+          <button
+            type="submit"
+            className={styles.chatSubmitBtn}
+            data-testid="chat-submit-btn"
+          >
             💬
           </button>
         </form>

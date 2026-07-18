@@ -61,58 +61,30 @@ async function getScores(page: Page): Promise<[number, number] | null> {
  * Helper: Tenta jogar uma carta se for a vez do jogador
  */
 async function tryPlayCard(page: Page): Promise<boolean> {
-  try {
-    const playButtons = page.locator('[data-testid^="play-card-btn-"]');
-    const count = await playButtons.count({ timeout: 500 });
-
-    if (count > 0) {
-      await playButtons.first().click();
-      return true;
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
+  const playButton = page.locator('[data-testid^="play-card-btn-"]').first();
+  if (!(await playButton.isVisible())) return false;
+  await playButton.click({ force: true, timeout: 3000 });
+  return true;
 }
 
 /**
  * Helper: Tenta decidir mão de onze se estiver visível
  */
 async function tryDecideEleven(page: Page): Promise<boolean> {
-  try {
-    const elevenBox = page.locator('[data-testid="eleven-decision-box"]');
-    const isVisible = await elevenBox.isVisible({ timeout: 500 });
-
-    if (isVisible) {
-      const playBtn = page.locator('[data-testid="eleven-play-btn"]');
-      await playBtn.click();
-      return true;
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
+  const playBtn = page.getByTestId("eleven-play-btn");
+  if (!(await playBtn.isVisible())) return false;
+  await playBtn.click({ force: true, timeout: 3000 });
+  return true;
 }
 
 /**
  * Helper: Tenta responder truco se estiver visível
  */
 async function tryRespondTruco(page: Page): Promise<boolean> {
-  try {
-    const acceptBtn = page.locator('[data-testid="truco-accept-btn"]');
-    const isVisible = await acceptBtn.isVisible({ timeout: 500 });
-
-    if (isVisible) {
-      await acceptBtn.click();
-      return true;
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
+  const acceptBtn = page.getByTestId("truco-accept-btn");
+  if (!(await acceptBtn.isVisible())) return false;
+  await acceptBtn.click({ force: true, timeout: 3000 });
+  return true;
 }
 
 /**
@@ -209,7 +181,7 @@ test.describe("Partida completa com bots", () => {
       await playOneIteration(page);
 
       // Pausa entre iterações (bots jogam automaticamente)
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(750);
     }
 
     // Verifica que a partida terminou
