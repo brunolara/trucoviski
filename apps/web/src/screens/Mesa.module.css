@@ -204,11 +204,8 @@
 }
 
 .partnerMiniCard {
-  font-size: 0.75rem;
-  font-weight: 800;
-  background: #fff;
-  padding: 0.05rem 0.2rem;
-  border-radius: 3px;
+  width: 34px;
+  height: 47px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
@@ -247,24 +244,9 @@
 }
 
 .viraCard {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.1rem;
-  padding: 0.2rem 0.5rem;
-  background: #ffffff;
-  border-radius: 6px;
-  font-weight: 800;
-  font-size: 1rem;
+  width: 48px;
+  height: 66px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
-
-.cardRank {
-  font-size: 1rem;
-}
-
-.cardSuit {
-  font-size: 0.9rem;
 }
 
 .trucoValue {
@@ -286,7 +268,7 @@
 .playedCardWrapper {
   position: absolute;
   width: 44px;
-  height: 56px;
+  height: 61px;
 }
 
 .playPos0 {
@@ -316,13 +298,6 @@
 .playedCard {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #ffffff;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 800;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
@@ -406,11 +381,8 @@
 }
 
 .miniCard {
-  padding: 0.1rem 0.3rem;
-  background: #ffffff;
-  border-radius: 3px;
-  font-size: 0.65rem;
-  font-weight: 800;
+  width: 27px;
+  height: 37px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
@@ -493,32 +465,15 @@
 }
 
 .handCard {
-  width: 58px;
-  height: 80px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #ffffff;
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  border-radius: 8px;
-  font-weight: 800;
-  font-size: 1rem;
+  width: 68px;
+  height: 94px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   cursor: pointer;
 }
 
 .ferroCard {
-  width: 58px;
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #1e272e 0%, #0f1418 100%);
-  border: 2px dashed rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.2);
+  width: 68px;
+  height: 94px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
   cursor: pointer;
 }
@@ -823,21 +778,6 @@
 
   .handArea {
     margin-top: 0;
-  }
-
-  .handCard,
-  .ferroCard {
-    width: 68px;
-    height: 94px;
-    font-size: 1.15rem;
-  }
-
-  .cardRank {
-    font-size: 1.25rem;
-  }
-
-  .cardSuit {
-    font-size: 1.1rem;
   }
 
   .hand {

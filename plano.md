@@ -158,7 +158,7 @@ Monorepo pnpm + Turborepo, TS strict, ESLint + Prettier, Vitest, CI local
 (`pnpm gate` roda lint+types+testes), Docker Compose esqueleto. **Gate G0:**
 `pnpm gate` verde no repo vazio; `engine` builda sem deps.
 
-### F1 — Engine de regras ⭐ (a fase mais importante)
+### F1 — Engine de regras ⭐ (concluída)
 
 `deck`, `ranking`, `hand`, `match`, ruleset paulista completo (empates, mão de
 onze, mão de ferro, escala de truco). PRNG seedável. **Gate G1:**
@@ -171,7 +171,7 @@ onze, mão de ferro, escala de truco). PRNG seedável. **Gate G1:**
 - Suite de cenários canônicos da seção 5 (empate na 1ª, canga tripla, correr no
   9, mão de onze recusada...).
 
-### F2 — Servidor Colyseus
+### F2 — Servidor Colyseus (concluída)
 
 `TrucoRoom` (maxClients 4), schemas + StateView (mãos privadas), lobby nativo do
 Colyseus listando salas, `fillWithBots` com bot-random, timers de turno,
@@ -181,7 +181,7 @@ partida completa; **teste de anti-cheat explícito: inspecionar payload bruto
 recebido por um cliente e provar que não contém cartas alheias**; reconexão no
 meio da mão preserva estado.
 
-### F3 — Cliente jogável (feio, mas funcional)
+### F3 — Cliente jogável (feio, mas funcional; concluída)
 
 React + Vite + Tailwind. Telas: Home (nickname) → Lobby (criar/entrar, preencher
 com bots, ready) → Mesa (mão em leque, vira, placar, botão truco com escala,
@@ -189,7 +189,7 @@ indicador de vez) → Fim. Zustand espelhando o state. Sem animação bonita ain
 **Gate G3:** Playwright: 1 humano + 3 bots jogam partida completa via UI; 4 abas
 humanas completam uma mão; funciona em viewport 390px (mobile).
 
-### F4 — Social + juice 🍅
+### F4 — Social + juice 🍅 (concluída)
 
 Chat inline (balões sobre o avatar, some em 5s), emoji picker, tomate com
 animação de arremesso + splat + som, `showCard` (segurar na carta → "mostrar"),
@@ -199,7 +199,7 @@ chat/emote/tomate/showCard; rate-limits testados no servidor; bot heurístico
 vence o random em ≥ 65% de 2.000 partidas simuladas (prova que a interface
 `BotStrategy` funciona).
 
-### F5 — UX mobile + PWA
+### F5 — UX mobile + PWA (concluída)
 
 Layout touch-first (cartas maiores, arrastar pra jogar), safe areas, manifest +
 service worker (instalável), reconexão visível ("reconectando..."), modo
@@ -207,15 +207,15 @@ paisagem opcional. **Gate G5:** Lighthouse PWA instalável; Playwright em device
 emulado (iPhone/Android) completa partida; derrubar rede 5s no meio da mão →
 volta sem perder estado.
 
-### F6 — Deploy + observabilidade (autorizada; adaptada à VPS)
+### F6 — Deploy + observabilidade (concluída; adaptada à VPS)
 
 Docker Compose no VPS com um container `server` (cliente estático, HTTP e
 WebSocket em `2568`) publicado apenas em loopback; Apache do host faz o proxy e
 protege `@colyseus/monitor` em dupla camada com a aplicação. Logs estruturados
 (pino), backup local do SQLite; backup externo é pendência operacional.
-Cloudflare permanece fora de escopo, sem alterações. **Gate G6:** partida
-completa em produção com 4 dispositivos reais; monitor acessível; smoke test
-pós-deploy automatizado.
+Cloudflare permanece fora de escopo, sem alterações. **Gate G6: confirmado pelo
+humano.** Critérios: partida completa em produção com 4 dispositivos reais;
+monitor acessível; smoke test pós-deploy automatizado.
 
 ### F7 — Polimento contínuo (backlog)
 

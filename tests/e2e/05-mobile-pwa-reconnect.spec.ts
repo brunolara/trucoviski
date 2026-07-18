@@ -58,7 +58,16 @@ test.describe("F5 - PWA e reconexão", () => {
       const roomId = await mesaScreen.getAttribute("data-room-id");
       expect(roomId).toBeTruthy();
       if (!roomId) throw new Error("Mesa is missing its room id");
-      const privateCardsBefore = await handCards.allTextContents();
+      // Captura a identidade das cartas via custom properties do spritesheet (F7).
+      const getCardSprites = async () => {
+        return handCards.evaluateAll((els) =>
+          els.map((el) => {
+            const style = getComputedStyle(el);
+            return `${style.getPropertyValue("--card-position-x")}:${style.getPropertyValue("--card-position-y")}`;
+          }),
+        );
+      };
+      const privateCardsBefore = await getCardSprites();
       expect(privateCardsBefore).toHaveLength(3);
 
       // Colyseus só aceita a reserva de reconexão após cinco segundos.
@@ -77,7 +86,7 @@ test.describe("F5 - PWA e reconexão", () => {
       await expect(mesaScreen).toBeVisible({ timeout: 15000 });
       await expect(mesaScreen).toHaveAttribute("data-room-id", roomId);
       await expect(handCards).toHaveCount(3);
-      expect(await handCards.allTextContents()).toEqual(privateCardsBefore);
+      expect(await getCardSprites()).toEqual(privateCardsBefore);
     } finally {
       await context.close();
     }

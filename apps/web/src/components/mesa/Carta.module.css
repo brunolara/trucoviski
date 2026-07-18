@@ -1,0 +1,14 @@
+.card {
+  width: 100%;
+  height: 100%;
+  background-image: url("/assets/pixel/card_fronts.png");
+  background-repeat: no-repeat;
+  background-size: 1361.7647% 415.9574%;
+  background-position: var(--card-position-x) var(--card-position-y);
+  image-rendering: pixelated;
+}
+
+.covered {
+  background-image: url("/assets/pixel/card_back_and_extras.png");
+  background-size: 335.2941% 213.8298%;
+}

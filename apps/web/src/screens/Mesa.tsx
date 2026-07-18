@@ -4,23 +4,10 @@ import { useStore } from "../store.js";
 import type { Card } from "@trucoviski/shared";
 import { EMOJI_WHITELIST } from "@trucoviski/shared";
 import { motion, AnimatePresence } from "framer-motion";
+import { Carta } from "../components/mesa/Carta.js";
 import styles from "./Mesa.module.css";
 
 /* ---- Helpers ------------------------------------------------------- */
-
-const SUIT_SYMBOLS: Record<string, string> = {
-  paus: "♣",
-  copas: "♥",
-  espadas: "♠",
-  ouros: "♦",
-};
-
-const SUIT_COLORS: Record<string, string> = {
-  paus: "#1a1a1a",
-  copas: "#e74c3c",
-  espadas: "#1a1a1a",
-  ouros: "#e74c3c",
-};
 
 const RANK_NAMES: Record<string, string> = {
   A: "ás",
@@ -28,14 +15,6 @@ const RANK_NAMES: Record<string, string> = {
   J: "valete",
   Q: "dama",
 };
-
-function cardLabel(card: Card): string {
-  return `${card.rank}${SUIT_SYMBOLS[card.suit] ?? ""}`;
-}
-
-function cardColor(suit: string): string {
-  return SUIT_COLORS[suit] ?? "#ccc";
-}
 
 function cardAriaLabel(card: Card): string {
   return `Jogar ${RANK_NAMES[card.rank] ?? card.rank} de ${card.suit}`;
@@ -255,15 +234,11 @@ export function Mesa() {
             <span className={styles.viraLabel}>Vira</span>
             <motion.div
               className={styles.viraCard}
-              style={{ color: cardColor(view.vira.suit) }}
               initial={{ scale: 0, rotateY: 180 }}
               animate={{ scale: 1, rotateY: 0 }}
               transition={{ type: "spring", stiffness: 200, damping: 15 }}
             >
-              <span className={styles.cardRank}>{view.vira.rank}</span>
-              <span className={styles.cardSuit}>
-                {SUIT_SYMBOLS[view.vira.suit] ?? ""}
-              </span>
+              <Carta card={view.vira} />
             </motion.div>
             <div className={styles.trucoValue}>
               {view.trucoValue > 1 && `Valendo ${view.trucoValue}`}
@@ -297,12 +272,11 @@ export function Mesa() {
                           }}
                           title="Carta coberta"
                         >
-                          🂠
+                          <Carta covered />
                         </motion.div>
                       ) : c ? (
                         <motion.div
                           className={styles.playedCard}
-                          style={{ color: cardColor(c.suit) }}
                           initial={{
                             scale: 0.5,
                             y: rel === 0 ? 30 : rel === 2 ? -30 : 0,
@@ -316,10 +290,7 @@ export function Mesa() {
                             damping: 20,
                           }}
                         >
-                          <span className={styles.cardRank}>{c.rank}</span>
-                          <span className={styles.cardSuit}>
-                            {SUIT_SYMBOLS[c.suit] ?? ""}
-                          </span>
+                          <Carta card={c} />
                         </motion.div>
                       ) : (
                         <div className={styles.playedCardEmpty}>
@@ -428,12 +399,8 @@ export function Mesa() {
                 view.partnerCards.length > 0 && (
                   <div className={styles.partnerCardsContainer}>
                     {view.partnerCards.map((pc, idx) => (
-                      <div
-                        key={idx}
-                        className={styles.partnerMiniCard}
-                        style={{ color: cardColor(pc.suit) }}
-                      >
-                        {cardLabel(pc)}
+                      <div key={idx} className={styles.partnerMiniCard}>
+                        <Carta card={pc} />
                       </div>
                     ))}
                   </div>
@@ -542,13 +509,13 @@ export function Mesa() {
               {v.winner !== null ? seatName(nicknames, v.winner) : "canga"} →
             </span>
             {v.plays.map((c, si) => (
-              <div
+              <Carta
+                card={c ?? undefined}
+                covered={!c}
                 key={si}
                 className={styles.miniCard}
-                style={c ? { color: cardColor(c.suit) } : undefined}
-              >
-                {c ? cardLabel(c) : "?"}
-              </div>
+                aria-label={c ? `${c.rank} de ${c.suit}` : "Carta coberta"}
+              />
             ))}
           </div>
         ))}
@@ -612,7 +579,8 @@ export function Mesa() {
                     }
                   }}
                 >
-                  <div
+                  <Carta
+                    covered
                     className={styles.ferroCard}
                     data-testid={`hand-card-${i}`}
                     onDoubleClick={() => playHiddenCard(i)}
@@ -632,9 +600,7 @@ export function Mesa() {
                           action.cardIndex === i,
                       )
                     }
-                  >
-                    ?
-                  </div>
+                  />
                 </motion.div>
               ))
             : view.handCards.map((c, i) => (
@@ -654,9 +620,9 @@ export function Mesa() {
                     }
                   }}
                 >
-                  <div
+                  <Carta
+                    card={c}
                     className={styles.handCard}
-                    style={{ color: cardColor(c.suit) }}
                     data-testid={`hand-card-${i}`}
                     onDoubleClick={() => playVisibleCard(c)}
                     onTouchEnd={(event) =>
@@ -676,12 +642,7 @@ export function Mesa() {
                           action.card.suit === c.suit,
                       )
                     }
-                  >
-                    <span className={styles.cardRank}>{c.rank}</span>
-                    <span className={styles.cardSuit}>
-                      {SUIT_SYMBOLS[c.suit] ?? ""}
-                    </span>
-                  </div>
+                  />
                   {isMyTurn && (
                     <div className={styles.cardControls}>
                       {legalPlayHidden.some(
@@ -693,7 +654,7 @@ export function Mesa() {
                           title="Jogar esta carta coberta (nunca vence a vaza)"
                           data-testid={`cover-card-btn-${i}`}
                         >
-                          🂠 Virar
+                          Virar coberta
                         </button>
                       )}
                     </div>
