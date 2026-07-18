@@ -18,15 +18,14 @@ ENV NODE_ENV=production \
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y sqlite3 \
+    && mkdir -p /data \
+    && chown node:node /data \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app /app
 
+USER node
+
 EXPOSE 2568
 
 CMD ["node", "apps/server/dist/main.js"]
-
-FROM caddy:2.10-alpine AS caddy
-
-COPY deploy/Caddyfile /etc/caddy/Caddyfile
-COPY --from=build /app/apps/web/dist /srv

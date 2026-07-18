@@ -80,3 +80,23 @@ decisões silenciosas de regra.
 - Mistura de bots: `fillBots` normaliza assentos (humanos nos mais baixos, na
   ordem de entrada; bots no resto) — com 2 humanos, cada time fica com 1
   humano + 1 bot.
+
+## Decisões F6 (deploy adaptado — implementadas)
+
+- Topologia sem Caddy: um único container `server` serve estáticos do web, HTTP
+  e WebSocket/Colyseus na porta interna 2568.
+- Apache do host é o único reverse proxy; o projeto não publica 80/443. O
+  container publica somente em loopback:
+  `127.0.0.1:${HOST_BIND_PORT:-2568}:2568`.
+- Monitor não é publicamente acessível — acesso exclusivo via túnel SSH ao
+  loopback do host; Apache retorna `403` em `/monitor`; aplicação mantém Basic
+  Auth para o acesso via túnel.
+- A aplicação compara hashes SHA-256 dos pares `MONITOR_USER:MONITOR_PASSWORD`
+  com `timingSafeEqual`. A senha real é gerada na VPS, nunca é commitada; `.env`
+  fica fora do git (`chmod 600`) e `.env.example` tem valor em branco.
+- Cloudflare permanece intocado por decisão do humano (fora de escopo; não
+  configurar nem alterar). SSL/TLS de borda atual é responsabilidade externa.
+- Backup: dump local via `sqlite3 .backup` no volume; cópia externa é pendência
+  operacional documentada, sem adicionar dependência.
+- Smoke pós-deploy valida home (200), `/healthz` (200) e `/monitor` público
+  bloqueado (403). A validação autenticada ocorre opcionalmente pelo túnel SSH.

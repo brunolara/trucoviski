@@ -5,5 +5,13 @@ node_modules
 **/dist
 .turbo
 coverage
+coverage/
 .env
 data
+deploy/
+docs/
+tests/
+playwright*
+test-results/
+*.md
+!README.md

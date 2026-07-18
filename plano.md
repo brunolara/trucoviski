@@ -36,18 +36,18 @@
 
 ## 3. Stack
 
-| Camada            | Escolha                                                         | Por quê                                                                                                                |
-| ----------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Monorepo          | pnpm workspaces + Turborepo                                     | Compartilhar tipos entre client/server/engine                                                                          |
-| Linguagem         | TypeScript strict em tudo                                       | Type-safety full-stack; Colyseus 0.17 infere tipos do servidor no cliente                                              |
-| Servidor          | **Colyseus 0.17** (Node 22)                                     | Salas, matchmaking, lobby, reconexão automática, `StateView` p/ estado privado (anti-cheat), `patchRate` delta binário |
-| Cliente           | React 19 + Vite + Tailwind + Framer Motion                      | Vibe coding confiável, animações de carta/tomate, PWA mobile                                                           |
-| Estado do cliente | Zustand (espelho do state Colyseus)                             | Simples, sem boilerplate                                                                                               |
-| Engine de regras  | Pacote TS puro, zero deps                                       | Testável, portável (mesmo código valida no server e anima no client)                                                   |
-| Testes            | Vitest + fast-check (property-based) + Playwright               | Ver seção 8                                                                                                            |
-| Persistência      | SQLite (better-sqlite3) via Drizzle                             | Log de partidas (futuro treino da IA), stats                                                                           |
-| Deploy            | Docker Compose no VPS; client estático (Caddy/Cloudflare Pages) | 30 CCU = 1 container pequeno                                                                                           |
-| Assets            | Sprites de carta em SVG/spritesheet, sons via Howler            | SVG facilita tematização estilo Balatro                                                                                |
+| Camada            | Escolha                                                   | Por quê                                                                                                                |
+| ----------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Monorepo          | pnpm workspaces + Turborepo                               | Compartilhar tipos entre client/server/engine                                                                          |
+| Linguagem         | TypeScript strict em tudo                                 | Type-safety full-stack; Colyseus 0.17 infere tipos do servidor no cliente                                              |
+| Servidor          | **Colyseus 0.17** (Node 22)                               | Salas, matchmaking, lobby, reconexão automática, `StateView` p/ estado privado (anti-cheat), `patchRate` delta binário |
+| Cliente           | React 19 + Vite + Tailwind + Framer Motion                | Vibe coding confiável, animações de carta/tomate, PWA mobile                                                           |
+| Estado do cliente | Zustand (espelho do state Colyseus)                       | Simples, sem boilerplate                                                                                               |
+| Engine de regras  | Pacote TS puro, zero deps                                 | Testável, portável (mesmo código valida no server e anima no client)                                                   |
+| Testes            | Vitest + fast-check (property-based) + Playwright         | Ver seção 8                                                                                                            |
+| Persistência      | SQLite (better-sqlite3) via Drizzle                       | Log de partidas (futuro treino da IA), stats                                                                           |
+| Deploy            | Docker Compose VPS; Apache do host → servidor em loopback | 30 CCU = 1 container pequeno                                                                                           |
+| Assets            | Sprites de carta em SVG/spritesheet, sons via Howler      | SVG facilita tematização estilo Balatro                                                                                |
 
 ---
 
@@ -207,12 +207,15 @@ paisagem opcional. **Gate G5:** Lighthouse PWA instalável; Playwright em device
 emulado (iPhone/Android) completa partida; derrubar rede 5s no meio da mão →
 volta sem perder estado.
 
-### F6 — Deploy + observabilidade
+### F6 — Deploy + observabilidade (autorizada; adaptada à VPS)
 
-Docker Compose no VPS (server + Caddy), client estático, `@colyseus/monitor`
-protegido por senha, logs estruturados (pino), backup do SQLite. **Gate G6:**
-partida completa em produção com 4 dispositivos reais; monitor acessível; smoke
-test pós-deploy automatizado.
+Docker Compose no VPS com um container `server` (cliente estático, HTTP e
+WebSocket em `2568`) publicado apenas em loopback; Apache do host faz o proxy e
+protege `@colyseus/monitor` em dupla camada com a aplicação. Logs estruturados
+(pino), backup local do SQLite; backup externo é pendência operacional.
+Cloudflare permanece fora de escopo, sem alterações. **Gate G6:** partida
+completa em produção com 4 dispositivos reais; monitor acessível; smoke test
+pós-deploy automatizado.
 
 ### F7 — Polimento contínuo (backlog)
 

@@ -2,7 +2,7 @@
 name: scout
 description: Investiga o workspace e retorna evidências sem alterar código, salvo boilerplate mecânico explicitamente delegado.
 mode: subagent
-model: opencode-go/deepseek-v4-flash
+model: router/desespero
 permission:
   read: allow
   glob: allow

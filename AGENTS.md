@@ -2,11 +2,10 @@
 
 ## Escopo atual
 
-Este workspace concluiu F1, F2 slice 1, F3 (cliente web jogável com bots) e F4
-(social, provocação e som sintetizado). O escopo atual é a implementação da F5
-(UX mobile + PWA, incluindo layout touch-first, safe areas, manifest + service
-worker, reconexão visível). Não implemente deploy (F6) ou novos slices F6+ até a
-fase proprietária aprovar esse trabalho.
+Este workspace concluiu F1–F5, incluindo UX mobile + PWA. A F6 (deploy e
+observabilidade) está aprovada e autorizada, adaptada para a VPS diagnosticada:
+Apache do host publica o domínio e o único container `server` atende estáticos,
+HTTP e WebSocket em loopback `127.0.0.1:2568`. Não inicie F7 ou novos slices.
 
 ## Regras fixas
 

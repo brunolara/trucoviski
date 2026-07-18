@@ -17,6 +17,8 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 let gameServer: ColyseusTestServer;
 
 beforeAll(async () => {
+  process.env["MONITOR_USER"] = "monitor-test-user";
+  process.env["MONITOR_PASSWORD"] = "monitor-test-password";
   gameServer = await boot(trucoConfig);
 });
 
@@ -48,12 +50,23 @@ describe("healthz endpoint", () => {
 // ---- 2. Monitor endpoint presence ------------------------------------
 
 describe("@colyseus/monitor", () => {
-  it("monitor route is registered (returns HTML)", async () => {
-    // In test env, no Caddy basic_auth, so monitor is directly accessible.
-    // Use native fetch to bypass httpie's JSON parsing that would reject HTML.
+  it("requires application Basic Auth and returns HTML with valid credentials", async () => {
     const port = (gameServer.server as unknown as { port: number }).port;
-    const res = await fetch(`http://127.0.0.1:${port}/monitor`);
+    const url = `http://127.0.0.1:${port}/monitor`;
+    const denied = await fetch(url);
+    expect(denied.status).toBe(401);
+    expect(denied.headers.get("www-authenticate")).toContain("Basic");
+    expect(denied.headers.get("cache-control")).toBe("no-store, private");
+
+    const res = await fetch(url, {
+      headers: {
+        authorization: `Basic ${Buffer.from(
+          "monitor-test-user:monitor-test-password",
+        ).toString("base64")}`,
+      },
+    });
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store, private");
     const text = await res.text();
     expect(text.toLowerCase()).toContain("colyseus");
   });
@@ -119,14 +132,17 @@ describe("deploy shell scripts", () => {
     expect(content).toContain("/data/backups");
   });
 
-  it("smoke-deploy.sh checks /healthz, / and /monitor=401", () => {
+  it("smoke-deploy.sh checks /healthz, / and public monitor denial", () => {
     const content = readFileSync(
       path.join(ROOT, "scripts/smoke-deploy.sh"),
       "utf8",
     );
     expect(content).toContain("/healthz");
-    expect(content).toContain('"401"');
+    expect(content).toContain('"403"');
     expect(content).toContain("/monitor");
+    expect(content).toContain("MONITOR_SMOKE_USER");
+    expect(content).toContain("MONITOR_SMOKE_INTERNAL_URL");
+    expect(content).not.toContain("--user");
     expect(content).toContain("curl");
   });
 });
@@ -136,10 +152,9 @@ describe("deploy shell scripts", () => {
 describe("Dockerfile", () => {
   const df = readFileSync(path.join(ROOT, "Dockerfile"), "utf8");
 
-  it("has build, server and caddy stages", () => {
+  it("has build and server stages only", () => {
     expect(df).toMatch(/FROM .* AS build/);
     expect(df).toMatch(/FROM .* AS server/);
-    expect(df).toMatch(/FROM caddy.* AS caddy/);
   });
 
   it("server stage exposes port 2568", () => {
@@ -150,48 +165,48 @@ describe("Dockerfile", () => {
     expect(df).toContain("apps/server/dist/main.js");
   });
 
-  it("caddy stage copies Caddyfile", () => {
-    expect(df).toContain("deploy/Caddyfile");
-  });
-
   it("server stage installs sqlite3 (for backup)", () => {
     expect(df).toContain("sqlite3");
   });
+
+  it("runs unprivileged and grants node ownership of persistent data", () => {
+    expect(df).toContain("chown node:node /data");
+    expect(df).toContain("USER node");
+  });
 });
 
-// ---- 6. Caddyfile structure ------------------------------------------
+// ---- 6. Apache vhost structure ---------------------------------------
 
-describe("Caddyfile", () => {
-  const cf = readFileSync(path.join(ROOT, "deploy/Caddyfile"), "utf8");
+describe("Apache vhost", () => {
+  const vhost = readFileSync(
+    path.join(ROOT, "deploy/apache/truco.brunodelara.dev.conf"),
+    "utf8",
+  );
 
-  it("uses env var for domain", () => {
-    expect(cf).toContain("{$CADDY_DOMAIN}");
+  it("proxies HTTP and WebSockets to the loopback-only server", () => {
+    expect(vhost).toContain("http://127.0.0.1:2568/");
+    expect(vhost).toContain("ws://127.0.0.1:2568/");
+    expect(vhost).toContain("HTTP:Upgrade");
   });
 
-  it("reverse-proxies /healthz to server:2568", () => {
-    expect(cf).toContain("/healthz");
-    expect(cf).toContain("server:2568");
+  it("returns 403 for every public /monitor path", () => {
+    expect(vhost).toContain('<LocationMatch "(?i)^/monitor(/|$)">');
+    expect(vhost).toContain("Require all denied");
+    expect(vhost).not.toContain("AuthType Basic");
+    expect(vhost).not.toContain("AuthUserFile");
+    expect(vhost).not.toContain("RequestHeader set Authorization");
   });
 
-  it("reverse-proxies /matchmake/* and /room/* to server", () => {
-    expect(cf).toContain("/matchmake/*");
-    expect(cf).toContain("/room/*");
-    expect(cf).toContain("server:2568");
+  it("uses trusted Cloudflare addresses for real client access logs", () => {
+    expect(vhost).toContain("RemoteIPHeader CF-Connecting-IP");
+    expect(vhost).toContain("173.245.48.0/20");
+    expect(vhost).toContain("2400:cb00::/32");
+    expect(vhost).toContain("LogFormat");
+    expect(vhost).toContain("cf_combined");
   });
 
-  it("protects /monitor with basic_auth", () => {
-    expect(cf).toContain("basic_auth");
-    expect(cf).toContain("{$MONITOR_USER}");
-    expect(cf).toContain("{$MONITOR_PASSWORD_HASH}");
-  });
-
-  it("serves static files with try_files fallback", () => {
-    expect(cf).toContain("try_files");
-    expect(cf).toContain("file_server");
-  });
-
-  it("enables compression", () => {
-    expect(cf).toContain("encode zstd gzip");
+  it("does not mention Caddy", () => {
+    expect(vhost.toLowerCase()).not.toContain("caddy");
   });
 });
 
@@ -206,18 +221,9 @@ describe("compose.yaml", () => {
     expect(compose).toMatch(/server:/);
   });
 
-  it("defines caddy service", () => {
-    expect(compose).toMatch(/caddy:/);
-  });
-
   it("server has healthcheck via /healthz", () => {
     expect(compose).toContain("healthcheck:");
     expect(compose).toContain("127.0.0.1:2568/healthz");
-  });
-
-  it("caddy depends_on server with service_healthy", () => {
-    expect(compose).toContain("depends_on:");
-    expect(compose).toContain("service_healthy");
   });
 
   it("server data is persisted via named volume", () => {
@@ -225,16 +231,17 @@ describe("compose.yaml", () => {
     expect(compose).toMatch(/volumes:/);
   });
 
-  it("exposes HTTPS (443) and HTTP (80) ports on caddy", () => {
-    expect(compose).toContain('"80:80"');
-    expect(compose).toContain('"443:443"');
+  it("publishes only the server port on loopback", () => {
+    expect(compose).toContain('"127.0.0.1:${HOST_BIND_PORT:-2568}:2568"');
+    expect(compose).not.toContain('"80:80"');
+    expect(compose).not.toContain('"443:443"');
+    expect(compose).not.toContain("caddy:");
   });
 
-  it("requires DOMAIN, MONITOR_USER and MONITOR_PASSWORD_HASH", () => {
-    expect(compose).toContain("${DOMAIN:?set DOMAIN in .env}");
+  it("requires monitor application credentials from the environment", () => {
     expect(compose).toContain("${MONITOR_USER:?set MONITOR_USER in .env}");
     expect(compose).toContain(
-      "${MONITOR_PASSWORD_HASH:?set MONITOR_PASSWORD_HASH in .env}",
+      "${MONITOR_PASSWORD:?set MONITOR_PASSWORD in .env}",
     );
   });
 });
@@ -244,21 +251,21 @@ describe("compose.yaml", () => {
 describe(".env.example", () => {
   const example = readFileSync(path.join(ROOT, ".env.example"), "utf8");
 
-  it("documents DOMAIN", () => {
-    expect(example).toContain("DOMAIN=");
+  it("documents loopback host binding", () => {
+    expect(example).toContain("HOST_BIND_PORT=");
   });
 
-  it("documents MONITOR_USER and MONITOR_PASSWORD_HASH", () => {
+  it("documents MONITOR_USER and MONITOR_PASSWORD", () => {
     expect(example).toContain("MONITOR_USER=");
-    expect(example).toContain("MONITOR_PASSWORD_HASH=");
+    expect(example).toContain("MONITOR_PASSWORD=");
   });
 
   it("documents SQLITE_PATH", () => {
     expect(example).toContain("SQLITE_PATH=");
   });
 
-  it("instructs to generate bcrypt hash", () => {
-    expect(example).toContain("hash-password");
+  it("does not include a monitor password", () => {
+    expect(example).not.toContain("replace-with");
   });
 });
 
@@ -277,6 +284,16 @@ describe(".dockerignore", () => {
 
   it("excludes .git from build context", () => {
     expect(di).toContain(".git");
+  });
+
+  it("excludes deploy and test artifacts but retains README", () => {
+    expect(di).toContain("deploy/");
+    expect(di).toContain("docs/");
+    expect(di).toContain("tests/");
+    expect(di).toContain("playwright*");
+    expect(di).toContain("test-results/");
+    expect(di).toContain("*.md");
+    expect(di).toContain("!README.md");
   });
 });
 
