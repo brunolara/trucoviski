@@ -88,9 +88,18 @@ test.describe("Mobile viewport", () => {
       expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
     }
 
-    const touchControl = page.getByTestId("emoji-btn-👍");
-    await expect(touchControl).toBeVisible();
-    await touchControl.tap();
+    // Social panel (F5: emoji buttons live inside a bottom-sheet)
+    const socialToggleBtn = page.getByTestId("social-toggle-btn");
+    await expect(socialToggleBtn).toBeVisible();
+    await socialToggleBtn.tap();
+    const socialPanel = page.getByTestId("social-panel");
+    await expect(socialPanel).toBeVisible({ timeout: 5000 });
+
+    const emojiBtn = page.getByTestId("emoji-btn-👍");
+    await expect(emojiBtn).toBeVisible({ timeout: 3000 });
+    await emojiBtn.tap();
+    // sendEmote closes the panel automatically in Mesa.tsx
+    await expect(socialPanel).toBeHidden({ timeout: 5000 });
     await expect(page.getByTestId("emote-bubble-0")).toHaveText("👍");
 
     // Verifica que não há overflow horizontal (scroll horizontal)

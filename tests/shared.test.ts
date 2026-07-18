@@ -3,7 +3,6 @@ import {
   validateChat,
   validateEmote,
   validateThrowTomato,
-  validateShowCard,
   validateAction,
   EMOJI_WHITELIST,
 } from "../packages/shared/src/index.js";
@@ -55,20 +54,6 @@ describe("Shared social validators (F4)", () => {
       expect(validateThrowTomato({ targetSeat: 4 })).toBeNull();
       expect(validateThrowTomato({ targetSeat: 1.5 })).toBeNull();
       expect(validateThrowTomato({})).toBeNull();
-    });
-  });
-
-  describe("validateShowCard", () => {
-    it("accepts valid card indexes", () => {
-      expect(validateShowCard({ cardIndex: 0 })).toEqual({ cardIndex: 0 });
-      expect(validateShowCard({ cardIndex: 2 })).toEqual({ cardIndex: 2 });
-    });
-
-    it("rejects invalid indexes", () => {
-      expect(validateShowCard({ cardIndex: -1 })).toBeNull();
-      expect(validateShowCard({ cardIndex: 3 })).toBeNull();
-      expect(validateShowCard({ cardIndex: 1.5 })).toBeNull();
-      expect(validateShowCard({})).toBeNull();
     });
   });
 });

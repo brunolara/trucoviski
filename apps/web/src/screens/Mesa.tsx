@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useStore } from "../store.js";
 import type { Card } from "@trucoviski/shared";
 import { EMOJI_WHITELIST } from "@trucoviski/shared";
@@ -22,12 +22,23 @@ const SUIT_COLORS: Record<string, string> = {
   ouros: "#e74c3c",
 };
 
+const RANK_NAMES: Record<string, string> = {
+  A: "ás",
+  K: "rei",
+  J: "valete",
+  Q: "dama",
+};
+
 function cardLabel(card: Card): string {
   return `${card.rank}${SUIT_SYMBOLS[card.suit] ?? ""}`;
 }
 
 function cardColor(suit: string): string {
   return SUIT_COLORS[suit] ?? "#ccc";
+}
+
+function cardAriaLabel(card: Card): string {
+  return `Jogar ${RANK_NAMES[card.rank] ?? card.rank} de ${card.suit}`;
 }
 
 function seatName(nicknames: Record<number, string>, s: number): string {
@@ -79,14 +90,15 @@ export function Mesa() {
   const sendChat = useStore((s) => s.sendChat);
   const sendEmote = useStore((s) => s.sendEmote);
   const throwTomato = useStore((s) => s.throwTomato);
-  const showCard = useStore((s) => s.showCard);
   const chatMessages = useStore((s) => s.chatMessages);
   const emotes = useStore((s) => s.emotes);
   const activeTomato = useStore((s) => s.activeTomato);
-  const shownCards = useStore((s) => s.shownCards);
   const banner = useStore((s) => s.banner);
 
   const [chatInput, setChatInput] = useState("");
+  const [showSocialPanel, setShowSocialPanel] = useState(false);
+  const lastCardTap = useRef<Record<number, number>>({});
+  const playDispatchGuard = useRef({ snapshotKey: "", isDispatching: false });
 
   if (screen !== "mesa") return null;
   if (!view) {
@@ -118,6 +130,18 @@ export function Mesa() {
     view.currentVaza?.currentSeat ??
     (legalPlayCards.length > 0 || legalPlayHidden.length > 0 ? seat : null);
 
+  // A resposta do servidor muda a vez, a vaza ou a mão. Até esse próximo
+  // snapshot, uma carta só pode gerar um dispatch, mesmo que touch sintetize
+  // um dblclick. A contagem de vazas é necessária quando o vencedor continua
+  // como mão na próxima vaza.
+  const playSnapshotKey = `${view.handNumber}:${view.completedVazas.length}:${turnSeat ?? "none"}`;
+  if (playDispatchGuard.current.snapshotKey !== playSnapshotKey) {
+    playDispatchGuard.current = {
+      snapshotKey: playSnapshotKey,
+      isDispatching: false,
+    };
+  }
+
   const getRelativeSeat = (absSeat: number) => {
     return (absSeat - seat + 4) % 4;
   };
@@ -127,7 +151,57 @@ export function Mesa() {
     if (chatInput.trim()) {
       sendChat(chatInput.trim());
       setChatInput("");
+      setShowSocialPanel(false);
     }
+  };
+
+  const dispatchPlayAction = (
+    action:
+      | (typeof legalPlayCards)[number]
+      | (typeof legalPlayHidden)[number]
+      | undefined,
+  ) => {
+    if (!isMyTurn || !action || playDispatchGuard.current.isDispatching) return;
+    playDispatchGuard.current.isDispatching = true;
+    dispatchAction(action);
+  };
+
+  const playVisibleCard = (card: Card) => {
+    const action = legalPlayCards.find(
+      (a) =>
+        a.type === "playCard" &&
+        a.card.rank === card.rank &&
+        a.card.suit === card.suit,
+    );
+    dispatchPlayAction(action);
+  };
+
+  const playHiddenCard = (cardIndex: number) => {
+    const action = legalPlayHidden.find(
+      (a) => a.type === "playHiddenCard" && a.cardIndex === cardIndex,
+    );
+    dispatchPlayAction(action);
+  };
+
+  const handleCardTap = (
+    event: React.TouchEvent,
+    cardIndex: number,
+    play: () => void,
+  ) => {
+    event.preventDefault();
+    const now = Date.now();
+    if (now - (lastCardTap.current[cardIndex] ?? 0) < 300) {
+      lastCardTap.current[cardIndex] = 0;
+      play();
+      return;
+    }
+    lastCardTap.current[cardIndex] = now;
+  };
+
+  const handleCardKeyDown = (event: React.KeyboardEvent, play: () => void) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    play();
   };
 
   // Positions on the board for the relative seats
@@ -274,9 +348,6 @@ export function Mesa() {
           const chat = chatMessages[absSeat];
           // Emote
           const emote = emotes[absSeat];
-          // Shown card
-          const shown = shownCards[absSeat];
-
           return (
             <div
               key={relSeat}
@@ -347,27 +418,6 @@ export function Mesa() {
                     transition={{ type: "spring", stiffness: 200, damping: 10 }}
                   >
                     {emote.emoji}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Shown card display (teasing) */}
-              <AnimatePresence>
-                {shown && (
-                  <motion.div
-                    className={styles.shownCardBubble}
-                    data-testid={`shown-card-bubble-${absSeat}`}
-                    initial={{ opacity: 0, scale: 0.5 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.5 }}
-                  >
-                    <div className={styles.shownCardText}>Mostrou:</div>
-                    <div
-                      className={styles.shownCardMini}
-                      style={{ color: cardColor(shown.card.suit) }}
-                    >
-                      {cardLabel(shown.card)}
-                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -558,38 +608,33 @@ export function Mesa() {
                   dragElastic={0.2}
                   onDragEnd={(_e, info) => {
                     if (info.offset.y < -50) {
-                      const hiddenAction = legalPlayHidden.find(
-                        (a) => a.type === "playHiddenCard" && a.cardIndex === i,
-                      );
-                      if (hiddenAction) {
-                        dispatchAction(hiddenAction);
-                      }
+                      playHiddenCard(i);
                     }
                   }}
                 >
                   <div
                     className={styles.ferroCard}
                     data-testid={`hand-card-${i}`}
+                    onDoubleClick={() => playHiddenCard(i)}
+                    onTouchEnd={(event) =>
+                      handleCardTap(event, i, () => playHiddenCard(i))
+                    }
+                    onKeyDown={(event) =>
+                      handleCardKeyDown(event, () => playHiddenCard(i))
+                    }
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Jogar carta coberta"
+                    aria-disabled={
+                      !legalPlayHidden.some(
+                        (action) =>
+                          action.type === "playHiddenCard" &&
+                          action.cardIndex === i,
+                      )
+                    }
                   >
                     ?
                   </div>
-                  {isMyTurn && (
-                    <div className={styles.cardControls}>
-                      <button
-                        className={styles.cardBtn}
-                        onClick={() => {
-                          const a = legalPlayHidden.find(
-                            (a) =>
-                              a.type === "playHiddenCard" && a.cardIndex === i,
-                          );
-                          if (a) dispatchAction(a);
-                        }}
-                        data-testid={`play-hidden-btn-${i}`}
-                      >
-                        Jogar (coberta)
-                      </button>
-                    </div>
-                  )}
                 </motion.div>
               ))
             : view.handCards.map((c, i) => (
@@ -605,15 +650,7 @@ export function Mesa() {
                   dragElastic={0.2}
                   onDragEnd={(_e, info) => {
                     if (info.offset.y < -50) {
-                      const action = legalPlayCards.find(
-                        (a) =>
-                          a.type === "playCard" &&
-                          a.card.rank === c.rank &&
-                          a.card.suit === c.suit,
-                      );
-                      if (action) {
-                        dispatchAction(action);
-                      }
+                      playVisibleCard(c);
                     }
                   }}
                 >
@@ -621,6 +658,24 @@ export function Mesa() {
                     className={styles.handCard}
                     style={{ color: cardColor(c.suit) }}
                     data-testid={`hand-card-${i}`}
+                    onDoubleClick={() => playVisibleCard(c)}
+                    onTouchEnd={(event) =>
+                      handleCardTap(event, i, () => playVisibleCard(c))
+                    }
+                    onKeyDown={(event) =>
+                      handleCardKeyDown(event, () => playVisibleCard(c))
+                    }
+                    role="button"
+                    tabIndex={0}
+                    aria-label={cardAriaLabel(c)}
+                    aria-disabled={
+                      !legalPlayCards.some(
+                        (action) =>
+                          action.type === "playCard" &&
+                          action.card.rank === c.rank &&
+                          action.card.suit === c.suit,
+                      )
+                    }
                   >
                     <span className={styles.cardRank}>{c.rank}</span>
                     <span className={styles.cardSuit}>
@@ -629,41 +684,12 @@ export function Mesa() {
                   </div>
                   {isMyTurn && (
                     <div className={styles.cardControls}>
-                      {legalPlayCards.some(
-                        (a) =>
-                          a.type === "playCard" &&
-                          a.card.rank === c.rank &&
-                          a.card.suit === c.suit,
-                      ) && (
-                        <button
-                          className={styles.cardBtn}
-                          onClick={() => {
-                            const a = legalPlayCards.find(
-                              (a) =>
-                                a.type === "playCard" &&
-                                a.card.rank === c.rank &&
-                                a.card.suit === c.suit,
-                            );
-                            if (a) dispatchAction(a);
-                          }}
-                          data-testid={`play-card-btn-${i}`}
-                        >
-                          Jogar
-                        </button>
-                      )}
                       {legalPlayHidden.some(
                         (a) => a.type === "playHiddenCard" && a.cardIndex === i,
                       ) && (
                         <button
                           className={styles.coverBtn}
-                          onClick={() => {
-                            const hiddenAction = legalPlayHidden.find(
-                              (a) =>
-                                a.type === "playHiddenCard" &&
-                                a.cardIndex === i,
-                            );
-                            if (hiddenAction) dispatchAction(hiddenAction);
-                          }}
+                          onClick={() => playHiddenCard(i)}
                           title="Jogar esta carta coberta (nunca vence a vaza)"
                           data-testid={`cover-card-btn-${i}`}
                         >
@@ -672,15 +698,6 @@ export function Mesa() {
                       )}
                     </div>
                   )}
-                  {/* Show Card eye button */}
-                  <button
-                    className={styles.revealBtn}
-                    onClick={() => showCard(i)}
-                    title="Mostrar/provocar oponente com esta carta"
-                    data-testid={`show-card-btn-${i}`}
-                  >
-                    👁️
-                  </button>
                 </motion.div>
               ))}
         </div>
@@ -728,39 +745,14 @@ export function Mesa() {
         </div>
       )}
 
-      {/* Social Control (Chat and Emoji Picker) */}
-      <div className={styles.socialControl}>
-        <div className={styles.emojiPicker}>
-          {EMOJI_WHITELIST.map((emoji) => (
-            <button
-              key={emoji}
-              className={styles.emojiBtn}
-              onClick={() => sendEmote(emoji)}
-              data-testid={`emoji-btn-${emoji}`}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-        <form className={styles.chatForm} onSubmit={handleSendChat}>
-          <input
-            type="text"
-            className={styles.chatInput}
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            placeholder="Digite provocação..."
-            maxLength={120}
-            data-testid="chat-input"
-          />
-          <button
-            type="submit"
-            className={styles.chatSubmitBtn}
-            data-testid="chat-submit-btn"
-          >
-            💬
-          </button>
-        </form>
-      </div>
+      <button
+        type="button"
+        className={styles.socialToggle}
+        onClick={() => setShowSocialPanel(true)}
+        data-testid="social-toggle-btn"
+      >
+        💬 Social
+      </button>
 
       {/* Footer */}
       <div className={styles.footer}>
@@ -786,6 +778,78 @@ export function Mesa() {
           Sair
         </button>
       </div>
+
+      {showSocialPanel && (
+        <div
+          className={styles.socialOverlay}
+          role="presentation"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            setShowSocialPanel(false);
+          }}
+        >
+          <div
+            className={styles.socialPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Chat e emojis"
+            tabIndex={-1}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setShowSocialPanel(false);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            data-testid="social-panel"
+          >
+            <div className={styles.socialPanelHeader}>
+              <strong>Social</strong>
+              <button
+                type="button"
+                className={styles.socialCloseBtn}
+                onClick={() => setShowSocialPanel(false)}
+                aria-label="Fechar painel social"
+                data-testid="social-close-btn"
+                autoFocus
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.emojiPicker}>
+              {EMOJI_WHITELIST.map((emoji) => (
+                <button
+                  key={emoji}
+                  className={styles.emojiBtn}
+                  onClick={() => {
+                    sendEmote(emoji);
+                    setShowSocialPanel(false);
+                  }}
+                  data-testid={`emoji-btn-${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            <form className={styles.chatForm} onSubmit={handleSendChat}>
+              <input
+                type="text"
+                className={styles.chatInput}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Digite provocação..."
+                maxLength={120}
+                data-testid="chat-input"
+              />
+              <button
+                type="submit"
+                className={styles.chatSubmitBtn}
+                data-testid="chat-submit-btn"
+              >
+                Enviar
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

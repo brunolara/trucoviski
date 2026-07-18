@@ -10,7 +10,6 @@ import type {
   PlayerView,
   GameEvent,
   MatchMetadata,
-  Card,
 } from "@trucoviski/shared";
 import { sounds } from "./utils/sounds.js";
 
@@ -123,7 +122,6 @@ export interface StoreState {
     phase: "flying" | "splat";
     timestamp: number;
   } | null;
-  shownCards: Record<number, { card: Card; timestamp: number }>;
 
   // Presentation banner (F: pacing)
   banner: { text: string; team?: 0 | 1 } | null;
@@ -147,7 +145,6 @@ export interface StoreState {
   sendChat: (text: string) => void;
   sendEmote: (emoji: string) => void;
   throwTomato: (targetSeat: number) => void;
-  showCard: (cardIndex: number) => void;
 }
 
 // ---- Initial state --------------------------------------------------
@@ -182,7 +179,6 @@ const initialState = {
   chatMessages: {},
   emotes: {},
   activeTomato: null,
-  shownCards: {},
   banner: null,
 };
 
@@ -465,28 +461,6 @@ export const useStore = create<StoreState>()((set, get) => {
       },
     );
 
-    room.onMessage("cardShown", (msg: { seat: number; card: Card }) => {
-      sounds.playFlip();
-      set((state) => ({
-        shownCards: {
-          ...state.shownCards,
-          [msg.seat]: { card: msg.card, timestamp: Date.now() },
-        },
-      }));
-      setTimeout(() => {
-        set((state) => {
-          const current = state.shownCards[msg.seat];
-          if (current && Date.now() - current.timestamp >= 5000) {
-            const next = { ...state.shownCards };
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-            delete next[msg.seat];
-            return { shownCards: next };
-          }
-          return {};
-        });
-      }, 5000);
-    });
-
     // Handler de desconexão involuntária (fail-closed, erro de rede).
     room.onLeave(async (code: number) => {
       if (code === 1000) return; // leave voluntário
@@ -654,12 +628,6 @@ export const useStore = create<StoreState>()((set, get) => {
       const { room } = get();
       if (!room) return;
       room.send("throwTomato", { targetSeat });
-    },
-
-    showCard(cardIndex) {
-      const { room } = get();
-      if (!room) return;
-      room.send("showCard", { cardIndex });
     },
 
     handleSnapshot(snap: SnapshotMessage) {

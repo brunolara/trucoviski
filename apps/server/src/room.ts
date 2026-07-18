@@ -13,7 +13,6 @@ import {
   validateChat,
   validateEmote,
   validateThrowTomato,
-  validateShowCard,
 } from "@trucoviski/shared";
 import type { SnapshotMessage, WireError } from "@trucoviski/shared";
 import { decideBotAction } from "@trucoviski/bots";
@@ -276,11 +275,6 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       return;
     }
 
-    if (type === "showCard") {
-      this.handleShowCard(client, message);
-      return;
-    }
-
     // Mensagem desconhecida – ignora.
   }
 
@@ -414,28 +408,6 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     });
   }
 
-  // -- handleShowCard ----------------------------------------------------
-  private handleShowCard(client: Client, message: unknown): void {
-    const seat = this.occupied.get(client.sessionId);
-    if (seat === undefined) return;
-    if (this.status !== "playing") return;
-
-    const parsed = validateShowCard(message);
-    if (!parsed) return;
-
-    const h = this.match.state().hand;
-    if (!h) return;
-
-    const cards = h.cards[seat];
-    if (!cards || parsed.cardIndex < 0 || parsed.cardIndex >= cards.length)
-      return;
-
-    const card = cards[parsed.cardIndex];
-    if (!card) return;
-
-    this.broadcast("cardShown", { seat, card });
-  }
-
   // -- handleAction -----------------------------------------------------
 
   private handleAction(client: Client, message: unknown): void {
@@ -549,6 +521,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.botTimerId = null;
       this.botDispatching = false;
       if (this.closing || this.status !== "playing") return;
+      if (this.isTeamDecisionReservedForHuman(botSeat)) return;
 
       const botView = this.match.playerView(botSeat);
       const botAction = decideBotAction(botView);
@@ -596,6 +569,24 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       }
     }
     return false;
+  }
+
+  /** Uma decisão de equipe pendente não pode ser tomada pelo bot se há aliado humano. */
+  private isTeamDecisionReservedForHuman(botSeat: Seat): boolean {
+    const state = this.match.state();
+    if (state.phase === "elevenDecision") {
+      const team: 0 | 1 = state.scores[0] === 11 ? 0 : 1;
+      return this.seatTeam(botSeat) === team && this.hasHumanOnTeam(team);
+    }
+
+    const pendingTeam = state.hand?.trucoPendingTeam;
+    if (pendingTeam === null || pendingTeam === undefined) return false;
+    const team: 0 | 1 = pendingTeam === 0 ? 1 : 0;
+    return this.seatTeam(botSeat) === team && this.hasHumanOnTeam(team);
+  }
+
+  private seatTeam(seat: Seat): 0 | 1 {
+    return seat === 0 || seat === 2 ? 0 : 1;
   }
 
   /** Primeiro bot no time (seat 0/2 para team 0, 1/3 para team 1). */

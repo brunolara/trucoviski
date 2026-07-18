@@ -58,12 +58,13 @@ async function getScores(page: Page): Promise<[number, number] | null> {
 }
 
 /**
- * Helper: Tenta jogar uma carta se for a vez do jogador
+ * Helper: Tenta jogar uma carta se for a vez do jogador.
+ * F5: jogar carta é via duplo-clique (desktop) / duplo-toque (mobile) no `.card`.
  */
 async function tryPlayCard(page: Page): Promise<boolean> {
-  const playButton = page.locator('[data-testid^="play-card-btn-"]').first();
-  if (!(await playButton.isVisible())) return false;
-  await playButton.click({ force: true, timeout: 3000 });
+  const playCard = page.locator('[data-testid^="hand-card-"]').first();
+  if (!(await playCard.isVisible())) return false;
+  await playCard.dblclick({ force: true, timeout: 3000 });
   return true;
 }
 

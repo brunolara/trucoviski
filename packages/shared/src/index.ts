@@ -103,7 +103,7 @@ export function validateSetNickname(
   return null;
 }
 
-// ---- Validação runtime de chat, emote, throwTomato, showCard (F4) ----
+// ---- Validação runtime de chat, emote e throwTomato (F4) --------------
 
 const chatPayloadSchema = z.strictObject({
   text: z.string().max(120),
@@ -136,18 +136,6 @@ export function validateThrowTomato(
 ): { targetSeat: number } | null {
   const result = throwTomatoPayloadSchema.safeParse(payload);
   if (result.success) return result.data as { targetSeat: number };
-  return null;
-}
-
-const showCardPayloadSchema = z.strictObject({
-  cardIndex: z.number().int().min(0).max(2),
-});
-
-export function validateShowCard(
-  payload: unknown,
-): { cardIndex: number } | null {
-  const result = showCardPayloadSchema.safeParse(payload);
-  if (result.success) return result.data;
   return null;
 }
 
