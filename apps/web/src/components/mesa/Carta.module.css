@@ -1,14 +1,52 @@
 .card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   width: 100%;
   height: 100%;
-  background-image: url("/assets/pixel/card_fronts.png");
-  background-repeat: no-repeat;
-  background-size: 1361.7647% 415.9574%;
-  background-position: var(--card-position-x) var(--card-position-y);
-  image-rendering: pixelated;
+  padding: var(--card-padding, 7%);
+  overflow: hidden;
+  background: #f2e8d5;
+  border: var(--card-border-width, 3px) solid #1c140c;
+  border-radius: var(--card-radius, 5px);
+  font-family: "VT323", monospace;
+  line-height: 0.85;
+}
+
+.corner,
+.cornerBottom {
+  font-size: var(--card-rank-size, 19px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cornerBottom {
+  align-self: flex-end;
+  transform: rotate(180deg);
+}
+
+.suit {
+  align-self: center;
+  font-family: serif;
+  font-size: var(--card-suit-size, 40px);
+  line-height: 0.8;
+  text-shadow: 2px 2px 0 rgb(0 0 0 / 20%);
+}
+
+.manilha {
+  border-color: #f4d06a;
+  box-shadow: inset 0 0 0 1px #caa23a;
 }
 
 .covered {
+  display: block;
+  padding: 0;
   background-image: url("/assets/pixel/card_back_and_extras.png");
+  background-repeat: no-repeat;
   background-size: 335.2941% 213.8298%;
+  background-position: 1.875% 97.196%;
+  border: 0;
+  border-radius: 0;
+  image-rendering: pixelated;
 }

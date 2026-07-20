@@ -9,6 +9,7 @@ export default tseslint.config(
       "**/dev-dist/**",
       "**/node_modules/**",
       ".turbo/**",
+      "mock-v2/**",
     ],
   },
   eslint.configs.recommended,

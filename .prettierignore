@@ -6,3 +6,4 @@ test-results
 playwright-report
 dev-dist
 .opencode
+mock-v2/
