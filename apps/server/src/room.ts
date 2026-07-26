@@ -6,7 +6,7 @@ import { Room, type Client } from "colyseus";
 import { randomInt } from "node:crypto";
 import { createMatch, paulista } from "@trucoviski/engine";
 import { PRNG_VERSION } from "@trucoviski/engine";
-import type { Seat, GameEvent } from "@trucoviski/engine";
+import type { Seat, GameEvent, PlayerView } from "@trucoviski/engine";
 import {
   NICKNAME_MAX_LENGTH,
   pickUniquePlayerNames,
@@ -25,6 +25,63 @@ import { logger } from "./logger.js";
 const MAX_SEATS = 4;
 const BOT_DELAY_MS = 1000;
 const BOT_DELAY_AFTER_VAZA_OR_HAND_MS = 2600;
+
+/** 5 personas × 5 veredictos. Só tabela — a decisão vem do bot, não daqui. */
+const PERSONAS = [
+  {
+    accept: "Aceita! Tenho carta.",
+    run: "Corre, tô sem nada.",
+    raise: "Aumenta! Tô com tudo.",
+    play: "Joga! Nossas cartas prestam.",
+    fold: "Melhor correr, tá magro aqui.",
+  },
+  {
+    // valentão
+    accept: "Aceita isso, parceiro!",
+    run: "Corre! Não dá pra segurar.",
+    raise: "Sobe pra doze! Tô lascado de bom.",
+    play: "Vamo jogar! Eles que se cuidem.",
+    fold: "Corre dessa, não vale o risco.",
+  },
+  {
+    // resmungão
+    accept: "Pode aceitar, dá pra brigar.",
+    run: "Corre logo, tô com lixo.",
+    raise: "Aumenta. Eles tão blefando.",
+    play: "Joga, mas sem chorar depois.",
+    fold: "Corre. Não temos nada aqui.",
+  },
+  {
+    // caipira
+    accept: "Aceita sim sinhô, tô bem servido.",
+    run: "Corre, uai! Minha mão é fraca.",
+    raise: "Aumenta essa, tô com as boa!",
+    play: "Bora jogar, tá bom demais.",
+    fold: "Foge dessa, num dá não.",
+  },
+  {
+    // analítico
+    accept: "Aceita: minha carta cobre.",
+    run: "Corre, a chance é ruim.",
+    raise: "Aumenta, temos vantagem clara.",
+    play: "Joga, o par tá acima da média.",
+    fold: "Corre, o par não sustenta.",
+  },
+] as const;
+
+/**
+ * Conselho do bot sobre a decisão de equipe pendente, só a partir da
+ * PlayerView dele. A persona é o seat: fixa a partida inteira, sem estado novo.
+ */
+export function botAdvice(view: PlayerView): string | null {
+  const persona = PERSONAS[view.mySeat % PERSONAS.length];
+  if (!persona) return null;
+  const action = decideBotAction(view);
+  if (action?.type === "truco") return persona[action.action] ?? null;
+  if (action?.type === "elevenDecision")
+    return action.decision === "play" ? persona.play : persona.fold;
+  return null;
+}
 
 function hasHoldEvent(events: readonly GameEvent[]): boolean {
   return events.some(
@@ -96,6 +153,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
 
   /** sessionId → timestamp do último tomate. */
   private lastTomatoTime = new Map<string, number>();
+
+  /** Dedupe: um conselho por pedido de truco / mão de onze. */
+  private lastAdviceKey: string | null = null;
 
   // -- Lifecycle -------------------------------------------------------
 
@@ -647,6 +707,39 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
         this.sendSnapshot(c, seat, events);
       }
     }
+    this.maybeAdvise();
+  }
+
+  /**
+   * Publica no chat a opinião do bot parceiro quando o humano precisa
+   * decidir truco ou mão de onze. Espelha os casos de scheduleBotTurn,
+   * mas escolhe quem fala em vez de quem age.
+   */
+  private maybeAdvise(): void {
+    if (this.status !== "playing") return;
+    const st = this.match.state();
+    if (!st.hand) return;
+
+    let team: 0 | 1;
+    let key: string;
+    if (st.phase === "elevenDecision") {
+      team = st.scores[0] === 11 ? 0 : 1;
+      key = `${st.handNumber}:onze`;
+    } else if (st.hand.trucoPendingTeam !== null) {
+      team = st.hand.trucoPendingTeam === 0 ? 1 : 0;
+      key = `${st.handNumber}:${st.hand.trucoPendingValue}`;
+    } else {
+      return;
+    }
+
+    if (!this.hasHumanOnTeam(team)) return;
+    const botSeat = this.firstBotOnTeam(team);
+    if (botSeat === null) return;
+    if (this.lastAdviceKey === key) return;
+    this.lastAdviceKey = key;
+
+    const text = botAdvice(this.match.playerView(botSeat as Seat));
+    if (text) this.broadcast("chatMessage", { seat: botSeat, text });
   }
 
   private sendSnapshot(
