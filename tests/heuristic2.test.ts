@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { decideHeuristicV2Action } from "../packages/bots/src/heuristic2.js";
+import { createDeck } from "@trucoviski/engine";
 import type { PlayerView, Card } from "@trucoviski/engine";
+import { decideHeuristicV2Action } from "../packages/bots/src/heuristic2.js";
+import {
+  getCardStrength,
+  strongerCardsRemaining,
+} from "../packages/bots/src/strength.js";
 
 describe("Heuristic Bot v2 (F1+F2)", () => {
   const defaultVira: Card = { suit: "paus", rank: "4" }; // manilha is '5'
@@ -221,5 +226,29 @@ describe("Heuristic Bot v2 (F1+F2)", () => {
       const action = decideHeuristicV2Action(view, midRng);
       expect(action?.type).toBe("playCard");
     });
+  });
+});
+
+describe("strongerCardsRemaining", () => {
+  function reference(card: Card, vira: Card, seen: readonly Card[]): number {
+    const key = (c: Card) => `${c.suit}-${c.rank}`;
+    const seenKeys = new Set(seen.map(key));
+    const s = getCardStrength(card, vira);
+    return createDeck().filter(
+      (c) => !seenKeys.has(key(c)) && getCardStrength(c, vira) > s,
+    ).length;
+  }
+
+  it("bate a varredura de baralho em todo o espaço", () => {
+    const deck = createDeck();
+    for (const vira of deck) {
+      for (const card of deck) {
+        for (const seen of [[], [vira], [vira, card], deck.slice(0, 7)]) {
+          expect(strongerCardsRemaining(card, vira, seen)).toBe(
+            reference(card, vira, seen),
+          );
+        }
+      }
+    }
   });
 });

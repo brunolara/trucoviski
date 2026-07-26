@@ -10,6 +10,7 @@
   },
   "scripts": {
     "arena": "tsx scripts/arena.mts",
+    "sweep:v3": "tsx scripts/sweep-v3.mts",
     "build": "turbo run build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

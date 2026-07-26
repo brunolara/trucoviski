@@ -1,13 +1,10 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* ------------------------------------------------------------------ */
-/*  Heuristic Bot v2 – contagem de cartas, estratégia de vaza correta,  */
-/*  truco sensível a placar e blefe (F1+F2)                             */
+/*  Heuristic Bot v2/v3 – contagem de cartas, estratégia de vaza,     */
+/*  truco sensível a placar e blefe                                    */
 /*                                                                      */
-/*  ponytail: os pesos/flags abaixo (F) foram calibrados por varredura  */
-/*  na arena (scripts/arena.mts) contra o bot v1 — não são "óbvios" na  */
-/*  leitura, então ficam nomeados para eu (ou você) reabrir a varredura */
-/*  se um dia o bot v1 for removido/mudado e a calibração precisar de   */
-/*  reset.                                                              */
+/*  DEFAULT_FEATURES = v2 (congelado, oponente de referência).         */
+/*  V3_FEATURES = preset novo (flags + knobs; F3 calibra os knobs).    */
 /* ------------------------------------------------------------------ */
 
 import {
@@ -20,6 +17,7 @@ import {
 import type { Card, PlayerView, Action } from "@trucoviski/engine";
 import {
   getCardStrength,
+  handStrength,
   collectSeenCards,
   strongerCardsRemaining,
   myTeam,
@@ -49,6 +47,40 @@ export interface HeuristicV2Features {
   /** Ajuste fino (unidades de força de carta, 1/13) nos limiares de aceitar/pedir truco — calibração via arena (scripts/arena.mts). */
   responseBaseOffset: number;
   proposeBaseOffset: number;
+
+  // ---- v3 flags (DEFAULT_FEATURES deixa tudo false → comportamento v2) ----
+  /** Mão de onze exige contribuição dos dois, não só teamMax >= 9. */
+  elevenNeedsPair: boolean;
+  /** beatsTable / cardsPlayedInVaza entram no limiar de truco. */
+  positionAware: boolean;
+  /** myMax >= 12 deixa de aumentar incondicionalmente. */
+  raiseGuard: boolean;
+  /** distToWin/distToLose substituem os ±0.12 que se anulam. */
+  distanceToTwelve: boolean;
+  /** wonFirst/topAlive viram bônus de limiar, não return accept. */
+  softOverrides: boolean;
+  /** handStrength() no lugar de myMax puro. */
+  topTwoStrength: boolean;
+
+  // ---- v3 knobs (só entram com o flag correspondente ligado) ----
+  /** Piso de força (0-13) que cada jogador precisa na mão de onze. */
+  elevenPairFloor: number;
+  /** Quanto baixar o limiar quando beatsTable. */
+  positionBeatsBonus: number;
+  /** Quanto baixar o limiar com ≥2 cartas na mesa. */
+  positionInfoBonus: number;
+  /** Com raiseGuard: só auto-raise se o próximo nível for ≤ este valor. */
+  raiseGuardMaxLevel: number;
+  /** Com distanceToTwelve: sobe limiar quando V cobre distToLose. */
+  distDangerWeight: number;
+  /** Com distanceToTwelve: desce limiar quando V cobre distToWin. */
+  distFinishWeight: number;
+  /** Com distanceToTwelve + respond: quanto o custo de correr (nível anterior/V) baixa o limiar. */
+  runCostWeight: number;
+  /** Com softOverrides: bônus (queda de limiar) por topAlive. */
+  softTopAliveBonus: number;
+  /** Com softOverrides: bônus (queda de limiar) por wonFirst — só no respond (F5.3). */
+  softWonFirstBonus: number;
 }
 
 /** Calibrado via arena: heuristic-v2 vs heuristic-v1, ~54% winrate em 24k jogos. */
@@ -62,7 +94,66 @@ export const DEFAULT_FEATURES: HeuristicV2Features = {
   sharpness: 80,
   responseBaseOffset: 3,
   proposeBaseOffset: 2.5,
+  // v3 off → bit-idêntico ao v2
+  elevenNeedsPair: false,
+  positionAware: false,
+  raiseGuard: false,
+  distanceToTwelve: false,
+  softOverrides: false,
+  topTwoStrength: false,
+  elevenPairFloor: 8,
+  positionBeatsBonus: 0.08,
+  positionInfoBonus: 0.04,
+  raiseGuardMaxLevel: 9,
+  distDangerWeight: 0.14,
+  distFinishWeight: 0.1,
+  runCostWeight: 0.1,
+  softTopAliveBonus: 0.35,
+  softWonFirstBonus: 0.22,
 };
+
+/**
+ * Preset v3 — base F5 (pré-varredura). Flags/knobs recalibrados pelo sweep F5.
+ * Ver docs/plano-bot-v3.md.
+ */
+export const V3_FEATURES: HeuristicV2Features = {
+  ...DEFAULT_FEATURES,
+  responseBaseOffset: 3.5,
+  proposeBaseOffset: 2.5, // F5.3: recalibrar — o 2.0 foi treinado com double-count
+  elevenNeedsPair: true,
+  positionAware: true,
+  raiseGuard: true,
+  distanceToTwelve: true,
+  softOverrides: true,
+  topTwoStrength: true,
+  elevenPairFloor: 9,
+  positionBeatsBonus: 0.08,
+  positionInfoBonus: 0.04,
+  raiseGuardMaxLevel: 9,
+  distDangerWeight: 0.1,
+  distFinishWeight: 0.1,
+  runCostWeight: 0.1,
+  softTopAliveBonus: 0.35,
+  softWonFirstBonus: 0.3,
+};
+
+export interface HandAssessment {
+  myMax: number;
+  /** handStrength() normalizado 0..1. */
+  topTwo: number;
+  holdsTopAlive: boolean;
+  cardsPlayedInVaza: 0 | 1 | 2 | 3;
+  isLastToPlay: boolean;
+  beatsTable: boolean;
+  partnerIsWinning: boolean;
+  vazaScore: "won1" | "lost1" | "tied1" | "none";
+  mustWinBoth: boolean;
+  distToWin: number;
+  distToLose: number;
+  /** Melhor carta na mesa atual (null se vazia). */
+  bestCardOnTable: Card | null;
+  bestSeatOnTable: number | null;
+}
 
 function scoreToProbability(
   score: number,
@@ -94,14 +185,81 @@ function holdsTopAliveCard(view: PlayerView): boolean {
   return strongerCardsRemaining(best, view.vira, seen) === 0;
 }
 
+function firstVazaScore(view: PlayerView): HandAssessment["vazaScore"] {
+  const first = view.completedVazas[0];
+  if (!first) return "none";
+  if (first.winner === null) return "tied1";
+  return TEAMS[first.winner] === myTeam(view) ? "won1" : "lost1";
+}
+
+/** Fatos da mão calculados uma vez; decisões de truco e de carta consomem. */
+export function assessHand(view: PlayerView): HandAssessment {
+  const team = myTeam(view);
+  const oppTeam = team === 0 ? 1 : 0;
+  const myMax = myMaxStrength(view.handCards, view.vira);
+  const topTwo = handStrength(view.handCards, view.vira);
+  const holdsTopAlive = holdsTopAliveCard(view);
+  const vazaScore = firstVazaScore(view);
+
+  let bestCardOnTable: Card | null = null;
+  let bestSeatOnTable: number | null = null;
+  let cardsPlayedInVaza = 0 as 0 | 1 | 2 | 3;
+
+  if (view.currentVaza) {
+    const plays = view.currentVaza.plays;
+    let count = 0;
+    for (let i = 0; i < 4; i++) {
+      const p = plays[i];
+      if (p) {
+        count++;
+        if (
+          !bestCardOnTable ||
+          compareCards(p, bestCardOnTable, view.vira, RANKS, SUITS) > 0
+        ) {
+          bestCardOnTable = p;
+          bestSeatOnTable = i;
+        }
+      }
+    }
+    cardsPlayedInVaza = Math.min(3, count) as 0 | 1 | 2 | 3;
+  }
+
+  const partnerSeat = partnerSeatOf(view.mySeat);
+  const partnerIsWinning = bestSeatOnTable === partnerSeat;
+  const isLastToPlay = cardsPlayedInVaza === 3;
+  const beatsTable =
+    bestCardOnTable !== null &&
+    view.handCards.some(
+      (c) => compareCards(c, bestCardOnTable!, view.vira, RANKS, SUITS) > 0,
+    );
+
+  return {
+    myMax,
+    topTwo,
+    holdsTopAlive,
+    cardsPlayedInVaza,
+    isLastToPlay,
+    beatsTable,
+    partnerIsWinning,
+    vazaScore,
+    mustWinBoth: vazaScore === "lost1",
+    distToWin: 12 - view.scores[team],
+    distToLose: 12 - view.scores[oppTeam],
+    bestCardOnTable,
+    bestSeatOnTable,
+  };
+}
+
 /** Threshold de aceitar/pedir truco, ajustado pelo placar. */
 function trucoThreshold(
   view: PlayerView,
   atRiskValue: number,
   base: number,
-  scoreSensitive: boolean,
+  features: HeuristicV2Features,
+  assessment: HandAssessment,
+  mode: "respond" | "propose",
 ): number {
-  if (!scoreSensitive) return base;
+  if (!features.scoreSensitive) return base;
   const team = myTeam(view);
   const oppTeam = team === 0 ? 1 : 0;
   const myScore = view.scores[team];
@@ -109,9 +267,63 @@ function trucoThreshold(
 
   let threshold = base;
   if (myScore < oppScore) threshold -= 0.08;
-  if (oppScore + atRiskValue >= 12) threshold += 0.12;
-  if (myScore + atRiskValue >= 12) threshold -= 0.12;
+
+  if (features.distanceToTwelve) {
+    // F5.1: magnitude (fração do caminho restante), não binário ≡ v2
+    const distLose = Math.max(1, assessment.distToLose);
+    const distWin = Math.max(1, assessment.distToWin);
+    const coverLose = Math.min(1, atRiskValue / distLose);
+    const coverWin = Math.min(1, atRiskValue / distWin);
+    threshold += features.distDangerWeight * coverLose;
+    threshold -= features.distFinishWeight * coverWin;
+    // Correr entrega o nível anterior: quanto mais alta a escada, mais barato aceitar
+    if (mode === "respond" && atRiskValue > 0) {
+      const prev = prevTrucoLevel(atRiskValue);
+      threshold -= features.runCostWeight * (prev / atRiskValue);
+    }
+  } else {
+    if (oppScore + atRiskValue >= 12) threshold += 0.12;
+    if (myScore + atRiskValue >= 12) threshold -= 0.12;
+  }
+
+  if (features.positionAware) {
+    // F5.2: termos independentes; knobs assinados (sweep escolhe o sinal)
+    if (assessment.beatsTable) {
+      threshold -=
+        features.positionBeatsBonus * (assessment.isLastToPlay ? 1 : 0.5);
+    }
+    threshold -=
+      features.positionInfoBonus * (assessment.cardsPlayedInVaza / 3);
+  }
+
+  if (features.softOverrides) {
+    if (features.topAliveAccept && assessment.holdsTopAlive)
+      threshold -= features.softTopAliveBonus;
+    // F5.3: wonFirst só no respond — no propose a base já desconta wonFirst
+    if (
+      mode === "respond" &&
+      features.wonFirstVazaMode !== "none" &&
+      assessment.vazaScore === "won1"
+    ) {
+      threshold -= features.softWonFirstBonus;
+    }
+  }
+
   return Math.min(0.92, Math.max(0.15, threshold));
+}
+
+/**
+ * Coberturas distanceToTwelve (F5.1) — exportada pra teste de sanidade da tabela.
+ */
+export function distanceCovers(
+  atRiskValue: number,
+  distToLose: number,
+  distToWin: number,
+): { coverLose: number; coverWin: number } {
+  return {
+    coverLose: Math.min(1, atRiskValue / Math.max(1, distToLose)),
+    coverWin: Math.min(1, atRiskValue / Math.max(1, distToWin)),
+  };
 }
 
 function opponentWeaknessBonus(view: PlayerView): number {
@@ -134,6 +346,13 @@ function nextTrucoLevel(current: number): number {
   return seq[idx + 1]!;
 }
 
+function prevTrucoLevel(current: number): number {
+  const seq = paulista.trucoSequence;
+  const idx = seq.indexOf(current);
+  if (idx <= 0) return current;
+  return seq[idx - 1]!;
+}
+
 function pickWeakest<T extends { card: Card }>(
   actions: readonly T[],
   vira: Card,
@@ -141,6 +360,15 @@ function pickWeakest<T extends { card: Card }>(
   return actions.reduce((best, a) =>
     getCardStrength(a.card, vira) < getCardStrength(best.card, vira) ? a : best,
   );
+}
+
+function strengthScore(
+  assessment: HandAssessment,
+  features: HeuristicV2Features,
+): number {
+  if (!features.topTwoStrength) return assessment.myMax / 13;
+  // Âncora em myMax (escala dos offsets v2); topTwo ajusta kickers/manilhas
+  return 0.65 * (assessment.myMax / 13) + 0.35 * assessment.topTwo;
 }
 
 export function decideHeuristicV2Action(
@@ -151,11 +379,13 @@ export function decideHeuristicV2Action(
   const actions = view.legalActions;
   if (actions.length === 0) return null;
 
+  const assessment = assessHand(view);
+
   // 1. Mão de onze
   const elevenActions = actions.filter((a) => a.type === "elevenDecision");
   if (elevenActions.length > 0) {
     const allCards = [...view.handCards, ...(view.partnerCards ?? [])];
-    const myMax = myMaxStrength(view.handCards, view.vira);
+    const myMax = assessment.myMax;
     const partnerMax = myMaxStrength(view.partnerCards ?? [], view.vira);
     const teamMax = Math.max(myMax, partnerMax);
     const goodCount = allCards.filter(
@@ -163,7 +393,29 @@ export function decideHeuristicV2Action(
     ).length;
 
     let decision: "play" | "run";
-    if (teamMax >= 11 || goodCount >= 3 || (myMax >= 9 && partnerMax >= 8)) {
+    if (features.elevenNeedsPair) {
+      const floor = features.elevenPairFloor;
+      if (
+        teamMax >= 11 ||
+        goodCount >= 3 ||
+        (myMax >= floor && partnerMax >= floor && goodCount >= 2)
+      ) {
+        decision = "play";
+      } else if (myMax >= floor && partnerMax >= floor) {
+        const prob = scoreToProbability(
+          Math.min(myMax, partnerMax) / 13,
+          floor / 13,
+          features.sharpness,
+        );
+        decision = rng() < prob ? "play" : "run";
+      } else {
+        decision = "run";
+      }
+    } else if (
+      teamMax >= 11 ||
+      goodCount >= 3 ||
+      (myMax >= 9 && partnerMax >= 8)
+    ) {
       decision = "play";
     } else {
       const prob = scoreToProbability(
@@ -188,29 +440,36 @@ export function decideHeuristicV2Action(
   );
   if (trucoResponses.length > 0) {
     const atRisk = view.trucoPendingValue ?? view.trucoValue;
-    const myMax = myMaxStrength(view.handCards, view.vira);
     const canRaise = actions.some(
       (a) => a.type === "truco" && (a as { action: string }).action === "raise",
     );
+    const raiseAction = actions.find(
+      (a) => a.type === "truco" && (a as { action: string }).action === "raise",
+    );
 
-    if (myMax >= 12 && canRaise) {
-      const raiseAction = actions.find(
-        (a) =>
-          a.type === "truco" && (a as { action: string }).action === "raise",
-      );
-      if (raiseAction) return raiseAction;
+    if (assessment.myMax >= 12 && canRaise && raiseAction) {
+      if (!features.raiseGuard) {
+        return raiseAction;
+      }
+      // Guard: só auto-raise se o nível resultante for ≤ raiseGuardMaxLevel
+      const raiseTo = nextTrucoLevel(atRisk);
+      if (raiseTo <= features.raiseGuardMaxLevel) {
+        return raiseAction;
+      }
     }
 
-    const wonFirst = wonFirstVaza(view);
-    if (
-      (features.topAliveAccept && holdsTopAliveCard(view)) ||
-      (features.wonFirstVazaMode === "override" && wonFirst)
-    ) {
-      return (
-        trucoResponses.find(
-          (a) => (a as { action: string }).action === "accept",
-        ) ?? null
-      );
+    const wonFirst = assessment.vazaScore === "won1";
+    if (!features.softOverrides) {
+      if (
+        (features.topAliveAccept && assessment.holdsTopAlive) ||
+        (features.wonFirstVazaMode === "override" && wonFirst)
+      ) {
+        return (
+          trucoResponses.find(
+            (a) => (a as { action: string }).action === "accept",
+          ) ?? null
+        );
+      }
     }
 
     const discount =
@@ -223,9 +482,15 @@ export function decideHeuristicV2Action(
       view,
       atRisk,
       base,
-      features.scoreSensitive,
+      features,
+      assessment,
+      "respond",
     );
-    const prob = scoreToProbability(myMax / 13, threshold, features.sharpness);
+    const prob = scoreToProbability(
+      strengthScore(assessment, features),
+      threshold,
+      features.sharpness,
+    );
     const decision = rng() < prob ? "accept" : "run";
     const selected = trucoResponses.find(
       (a) => (a as { action: string }).action === decision,
@@ -238,21 +503,32 @@ export function decideHeuristicV2Action(
     (a) => a.type === "truco" && (a as { action: string }).action === "raise",
   );
   if (trucoProposals.length > 0) {
-    const myMax = myMaxStrength(view.handCards, view.vira);
-    const wonFirst = wonFirstVaza(view);
-    const base =
-      (wonFirst ? 7.5 / 13 : 9.5 / 13) + features.proposeBaseOffset / 13;
-    const threshold = trucoThreshold(
-      view,
-      nextTrucoLevel(view.trucoValue),
-      base,
-      features.scoreSensitive,
-    );
-    const score =
-      myMax / 13 +
-      (features.opponentWeaknessBluff ? opponentWeaknessBonus(view) : 0);
-    if (rng() < scoreToProbability(score, threshold, features.sharpness)) {
-      return trucoProposals[0] ?? null;
+    const wonFirst = assessment.vazaScore === "won1";
+    const nextLevel = nextTrucoLevel(view.trucoValue);
+    // raiseGuard também na proposta: não pedir 12 de graça sem mão absurda
+    if (
+      features.raiseGuard &&
+      nextLevel > features.raiseGuardMaxLevel &&
+      assessment.myMax < 12
+    ) {
+      // cai pra jogar carta
+    } else {
+      const base =
+        (wonFirst ? 7.5 / 13 : 9.5 / 13) + features.proposeBaseOffset / 13;
+      const threshold = trucoThreshold(
+        view,
+        nextLevel,
+        base,
+        features,
+        assessment,
+        "propose",
+      );
+      const score =
+        strengthScore(assessment, features) +
+        (features.opponentWeaknessBluff ? opponentWeaknessBonus(view) : 0);
+      if (rng() < scoreToProbability(score, threshold, features.sharpness)) {
+        return trucoProposals[0] ?? null;
+      }
     }
   }
 
@@ -270,39 +546,22 @@ export function decideHeuristicV2Action(
       return pickWeakest(playCardActions, view.vira);
     }
 
-    const plays = view.currentVaza!.plays;
-    const partnerSeat = partnerSeatOf(view.mySeat);
-
-    let bestCard: Card | null = null;
-    let bestSeat: number | null = null;
-    for (let i = 0; i < 4; i++) {
-      const p = plays[i];
-      if (
-        p &&
-        (!bestCard || compareCards(p, bestCard, view.vira, RANKS, SUITS) > 0)
-      ) {
-        bestCard = p;
-        bestSeat = i;
-      }
-    }
-
-    const partnerIsWinning = bestSeat === partnerSeat;
-    const isLastToPlay = plays.filter((p) => p !== null).length === 3;
     if (
-      partnerIsWinning &&
-      (features.generalizedPartnerDiscard || isLastToPlay)
+      assessment.partnerIsWinning &&
+      (features.generalizedPartnerDiscard || assessment.isLastToPlay)
     ) {
       return pickWeakest(playCardActions, view.vira);
     }
 
+    const bestCard = assessment.bestCardOnTable;
     if (bestCard) {
       const winningActions = playCardActions.filter(
-        (a) => compareCards(a.card, bestCard!, view.vira, RANKS, SUITS) > 0,
+        (a) => compareCards(a.card, bestCard, view.vira, RANKS, SUITS) > 0,
       );
 
       if (features.cangaOnPurpose && vazaIndex === 1 && wonFirstVaza(view)) {
         const tieActions = playCardActions.filter(
-          (a) => compareCards(a.card, bestCard!, view.vira, RANKS, SUITS) === 0,
+          (a) => compareCards(a.card, bestCard, view.vira, RANKS, SUITS) === 0,
         );
         if (tieActions.length > 0) {
           return pickWeakest(tieActions, view.vira);
@@ -324,4 +583,13 @@ export function decideHeuristicV2Action(
   }
 
   return actions.find((a) => a.type !== "surrender") ?? null;
+}
+
+/** Política v3: mesmo motor, preset V3_FEATURES. */
+export function decideHeuristicV3Action(
+  view: PlayerView,
+  rng: Rng = Math.random,
+  features: HeuristicV2Features = V3_FEATURES,
+): Action | null {
+  return decideHeuristicV2Action(view, rng, features);
 }

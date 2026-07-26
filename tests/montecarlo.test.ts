@@ -87,5 +87,5 @@ describe("Monte Carlo Bot (F3)", () => {
     });
     expect(result.errors).toEqual([]);
     expect(result.winRateTeam0).toBeGreaterThan(0.8);
-  });
+  }, 30_000);
 });

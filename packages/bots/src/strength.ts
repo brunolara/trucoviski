@@ -3,7 +3,7 @@
 /*  Strength – força de carta/mão e contagem de cartas vivas            */
 /* ------------------------------------------------------------------ */
 
-import { RANKS, createDeck, TEAMS } from "@trucoviski/engine";
+import { RANKS, SUITS, createDeck, TEAMS } from "@trucoviski/engine";
 import type { Card, PlayerView, Seat, Team } from "@trucoviski/engine";
 
 /** Força de uma carta (0-9 cartas normais, 10-13 manilhas por naipe). */
@@ -61,17 +61,55 @@ export function collectSeenCards(view: PlayerView): Card[] {
   return seen;
 }
 
+/** Id numérico único de carta (naipe*16 + rank). Máx 4*16+9 = 73. */
+function cardId(card: Card): number {
+  return SUITS.indexOf(card.suit) * 16 + RANKS.indexOf(card.rank);
+}
+
+/**
+ * tabela[s] = quantas cartas do baralho completo são mais fortes que a força s.
+ * Depende só do vira, então fica cacheada por id do vira — no máximo 40 tabelas
+ * na vida do processo, e na prática 1 por mão.
+ *
+ * ponytail: cache global mutável, mas a função é pura em `vira` (mesma vira →
+ * mesma tabela), então não há contaminação entre partidas ou entre threads.
+ */
+const STRONGER_TABLE: (Int8Array | undefined)[] = [];
+
+function strongerTable(vira: Card): Int8Array {
+  const key = cardId(vira);
+  const cached = STRONGER_TABLE[key];
+  if (cached) return cached;
+  const table = new Int8Array(15); // forças 0..13, +1 de folga
+  const deck = createDeck();
+  for (let s = 0; s <= 14; s++) {
+    let n = 0;
+    for (const c of deck) if (getCardStrength(c, vira) > s) n++;
+    table[s] = n;
+  }
+  STRONGER_TABLE[key] = table;
+  return table;
+}
+
 /** Quantas cartas mais fortes que `card` ainda podem estar em jogo (não vistas). */
 export function strongerCardsRemaining(
   card: Card,
   vira: Card,
   seenCards: readonly Card[],
 ): number {
-  const seenKeys = new Set(seenCards.map(cardKey));
   const myStrength = getCardStrength(card, vira);
-  return createDeck().filter(
-    (c) => !seenKeys.has(cardKey(c)) && getCardStrength(c, vira) > myStrength,
-  ).length;
+  // Dedupe por id numérico: a versão antiga deduplicava via Set<string> e o
+  // resultado precisa continuar idêntico mesmo se `seen` repetir uma carta.
+  const counted = new Set<number>();
+  let seenStronger = 0;
+  for (const c of seenCards) {
+    if (getCardStrength(c, vira) <= myStrength) continue;
+    const id = cardId(c);
+    if (counted.has(id)) continue;
+    counted.add(id);
+    seenStronger++;
+  }
+  return strongerTable(vira)[myStrength]! - seenStronger;
 }
 
 export function myTeam(view: PlayerView): Team {

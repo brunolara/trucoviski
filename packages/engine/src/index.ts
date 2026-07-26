@@ -87,7 +87,9 @@ export { createMatch } from "./match.js";
 export { runArena, runSimulation } from "./simulation.js";
 export type {
   ArenaConfig,
+  ArenaDiagnostics,
   ArenaResult,
+  BotPolicy,
   SimulationConfig,
   SimulationResult,
 } from "./simulation.js";

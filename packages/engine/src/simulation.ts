@@ -138,11 +138,11 @@ export function runSimulation(config: SimulationConfig): SimulationResult {
 export type BotPolicy = (view: PlayerView) => Action | null;
 
 export interface ArenaConfig {
-  /** Número de jogos a simular. */
+  /** Número de seeds a simular (com mirrored, cada seed roda 2×). */
   games: number;
-  /** Política do time 0 (assentos 0 e 2). */
+  /** Política A (reportada como team0Wins / winRateTeam0). */
   policyTeam0: BotPolicy;
-  /** Política do time 1 (assentos 1 e 3). */
+  /** Política B (reportada como team1Wins). */
   policyTeam1: BotPolicy;
   /** Semente base (cada jogo usa base + gameIndex). */
   seed?: number;
@@ -150,23 +150,83 @@ export interface ArenaConfig {
   maxActions?: number;
   /** Ruleset a usar (default: paulista). */
   ruleset?: RuleSet;
+  /**
+   * Se true, cada seed roda duas vezes com os lados trocados e as vitórias
+   * são atribuídas à política (não ao assento). Cancela viés posicional.
+   */
+  mirrored?: boolean;
+}
+
+export interface ArenaDiagnostics {
+  /** Contagem de partidas fechadas por valor da mão decisiva. */
+  closingHandValues: Record<number, number>;
+  /** Partidas cuja mão decisiva foi mão de onze (ou ferro 11×11). */
+  closingElevenHands: number;
+  /** Partidas perdidas pela política A numa mão de valor ≥ 9. */
+  policy0LossesOnBigHand: number;
+  /** Partidas perdidas pela política B numa mão de valor ≥ 9. */
+  policy1LossesOnBigHand: number;
+  /** Mãos de onze jogadas (play) e perdidas pela política A. */
+  policy0ElevenPlayedAndLost: number;
+  /** Mãos de onze jogadas (play) e perdidas pela política B. */
+  policy1ElevenPlayedAndLost: number;
+  /** Accept/run/raise contados pelo valor pendente/atingido. */
+  trucoAcceptByLevel: Record<number, number>;
+  trucoRunByLevel: Record<number, number>;
+  trucoRaiseByLevel: Record<number, number>;
+  /** Soma de tentos entregues por corrida (truco run + eleven run). */
+  pointsFromRun: number;
 }
 
 export interface ArenaResult {
+  /** Seeds pedidas (não conta o ×2 do espelho). */
   games: number;
+  /** Partidas efetivamente rodadas (games × 2 se mirrored). */
+  matchesPlayed: number;
   completed: number;
   timedOut: number;
+  /** Vitórias da policyTeam0 (independente do assento quando mirrored). */
   team0Wins: number;
+  /** Vitórias da policyTeam1. */
   team1Wins: number;
-  /** Taxa de vitória do time 0 entre os jogos completados (0..1). */
+  /** Taxa de vitória da policyTeam0 entre os jogos completados (0..1). */
   winRateTeam0: number;
   errors: string[];
+  mirrored: boolean;
+  elapsedMs: number;
+  gamesPerSecond: number;
+  diagnostics: ArenaDiagnostics;
+}
+
+function emptyDiagnostics(): ArenaDiagnostics {
+  return {
+    closingHandValues: {},
+    closingElevenHands: 0,
+    policy0LossesOnBigHand: 0,
+    policy1LossesOnBigHand: 0,
+    policy0ElevenPlayedAndLost: 0,
+    policy1ElevenPlayedAndLost: 0,
+    trucoAcceptByLevel: {},
+    trucoRunByLevel: {},
+    trucoRaiseByLevel: {},
+    pointsFromRun: 0,
+  };
+}
+
+function bump(map: Record<number, number>, key: number): void {
+  map[key] = (map[key] ?? 0) + 1;
+}
+
+interface SingleMatchOutcome {
+  finished: boolean;
+  /** 0 = policy sentada como time 0 ganhou o placar de assento. */
+  seatWinner: 0 | 1 | null;
+  error: string | null;
 }
 
 /**
- * Roda `games` partidas completas com uma política determinística (ou não)
- * por time, e reporta o placar agregado. Base da arena de medição (F0):
- * qualquer melhoria de bot deve bater a versão anterior em winrate aqui.
+ * Roda `games` partidas completas com uma política por time, e reporta o
+ * placar agregado. Com `mirrored`, cada seed roda nos dois lados.
  */
 export function runArena(config: ArenaConfig): ArenaResult {
   const {
@@ -176,81 +236,237 @@ export function runArena(config: ArenaConfig): ArenaResult {
     seed = 42,
     maxActions = 5000,
     ruleset = paulista,
+    mirrored = false,
   } = config;
 
-  // PRNG determinístico separado para fallback (ação ilegal/nula da política)
+  const start = performance.now();
   const fallbackRng = createPRNG(seed);
+  const diagnostics = emptyDiagnostics();
 
   let completed = 0;
   let timedOut = 0;
   let team0Wins = 0;
   let team1Wins = 0;
   const errors: string[] = [];
+  let matchesPlayed = 0;
+
+  const orientations: Array<{
+    p0: BotPolicy;
+    p1: BotPolicy;
+    /** Se true, policyTeam0 está sentada no time de assento 0. */
+    policy0IsSeat0: boolean;
+  }> = mirrored
+    ? [
+        { p0: policyTeam0, p1: policyTeam1, policy0IsSeat0: true },
+        { p0: policyTeam1, p1: policyTeam0, policy0IsSeat0: false },
+      ]
+    : [{ p0: policyTeam0, p1: policyTeam1, policy0IsSeat0: true }];
 
   for (let g = 0; g < games; g++) {
     const gameSeed = seed + g;
-    const match = createMatch(ruleset, gameSeed);
-
-    let actionCount = 0;
-    let finished = false;
-
-    while (actionCount < maxActions) {
-      const s = match.state();
-      if (s.phase === "matchFinished") {
-        finished = true;
-        if (s.scores[0] >= ruleset.winThreshold) team0Wins++;
-        else team1Wins++;
-        break;
+    for (const ori of orientations) {
+      matchesPlayed++;
+      const outcome = runSingleMatch({
+        gameSeed,
+        policySeat0: ori.p0,
+        policySeat1: ori.p1,
+        policy0IsSeat0: ori.policy0IsSeat0,
+        maxActions,
+        ruleset,
+        fallbackRng,
+        diagnostics,
+      });
+      if (outcome.error) errors.push(outcome.error);
+      if (!outcome.finished || outcome.seatWinner === null) {
+        timedOut++;
+        continue;
       }
-
-      const actor = findActor(match);
-      if (!actor) {
-        errors.push(
-          `Game ${gameSeed}: no legal actions but match not finished (hand ${s.handNumber})`,
-        );
-        break;
-      }
-
-      const view: PlayerView = match.playerView(actor.seat);
-      if (view.legalActions.length === 0) {
-        errors.push(
-          `Game ${gameSeed}: seat ${actor.seat} has no legal actions but should (hand ${s.handNumber})`,
-        );
-        break;
-      }
-
-      const policy = TEAMS[actor.seat] === 0 ? policyTeam0 : policyTeam1;
-      const decided = policy(view);
-      const action =
-        decided ??
-        view.legalActions[fallbackRng.nextInt(view.legalActions.length)]!;
-
-      const result = match.dispatch(actor.seat, action);
-      if (!result.success) {
-        errors.push(
-          `Game ${gameSeed}: unexpected rejection "${result.error}" for action ${JSON.stringify(action)} at seat ${actor.seat}`,
-        );
-        break;
-      }
-      actionCount++;
-    }
-
-    if (finished) {
       completed++;
-    } else {
-      timedOut++;
+      const policy0Won = ori.policy0IsSeat0
+        ? outcome.seatWinner === 0
+        : outcome.seatWinner === 1;
+      if (policy0Won) team0Wins++;
+      else team1Wins++;
     }
   }
 
+  const elapsedMs = performance.now() - start;
   return {
     games,
+    matchesPlayed,
     completed,
     timedOut,
     team0Wins,
     team1Wins,
     winRateTeam0: completed > 0 ? team0Wins / completed : 0,
     errors,
+    mirrored,
+    elapsedMs,
+    gamesPerSecond: elapsedMs > 0 ? (matchesPlayed * 1000) / elapsedMs : 0,
+    diagnostics,
   };
+}
+
+function runSingleMatch(args: {
+  gameSeed: number;
+  policySeat0: BotPolicy;
+  policySeat1: BotPolicy;
+  policy0IsSeat0: boolean;
+  maxActions: number;
+  ruleset: RuleSet;
+  fallbackRng: ReturnType<typeof createPRNG>;
+  diagnostics: ArenaDiagnostics;
+}): SingleMatchOutcome {
+  const {
+    gameSeed,
+    policySeat0,
+    policySeat1,
+    policy0IsSeat0,
+    maxActions,
+    ruleset,
+    fallbackRng,
+    diagnostics,
+  } = args;
+  const match = createMatch(ruleset, gameSeed);
+
+  let actionCount = 0;
+  let lastHandTentos = 0;
+  let lastHandWasEleven = false;
+  let lastHandElevenPlayed: 0 | 1 | null = null;
+  let lastHandWinner: 0 | 1 | null = null;
+  let elevenTeamThisHand: 0 | 1 | null = null;
+  let elevenPlayedThisHand = false;
+
+  while (actionCount < maxActions) {
+    const s = match.state();
+    if (s.phase === "matchFinished") {
+      // Mão decisiva
+      bump(diagnostics.closingHandValues, lastHandTentos);
+      if (lastHandWasEleven) diagnostics.closingElevenHands++;
+      if (lastHandWinner !== null) {
+        const seatLoser: 0 | 1 = lastHandWinner === 0 ? 1 : 0;
+        const policyLoserIs0 = policy0IsSeat0
+          ? seatLoser === 0
+          : seatLoser === 1;
+        if (lastHandTentos >= 9) {
+          if (policyLoserIs0) diagnostics.policy0LossesOnBigHand++;
+          else diagnostics.policy1LossesOnBigHand++;
+        }
+        if (lastHandWasEleven && lastHandElevenPlayed !== null) {
+          const playedSeat = lastHandElevenPlayed;
+          const playedAndLost = playedSeat === seatLoser;
+          if (playedAndLost) {
+            const policyPlayedIs0 = policy0IsSeat0
+              ? playedSeat === 0
+              : playedSeat === 1;
+            if (policyPlayedIs0) diagnostics.policy0ElevenPlayedAndLost++;
+            else diagnostics.policy1ElevenPlayedAndLost++;
+          }
+        }
+      }
+      const seatWinner: 0 | 1 = s.scores[0] >= ruleset.winThreshold ? 0 : 1;
+      return { finished: true, seatWinner, error: null };
+    }
+
+    // Detecta mão de onze / ferro pelo HandState atual
+    if (
+      s.hand &&
+      (s.phase === "elevenDecision" || s.hand.isElevenHand || s.hand.isFerro)
+    ) {
+      lastHandWasEleven = true;
+      if (s.hand.isFerro) {
+        elevenTeamThisHand = null;
+      } else if (s.scores[0] === ruleset.elevenThreshold) {
+        elevenTeamThisHand = 0;
+      } else if (s.scores[1] === ruleset.elevenThreshold) {
+        elevenTeamThisHand = 1;
+      }
+    }
+
+    const actor = findActor(match);
+    if (!actor) {
+      return {
+        finished: false,
+        seatWinner: null,
+        error: `Game ${gameSeed}: no legal actions but match not finished (hand ${s.handNumber})`,
+      };
+    }
+
+    const view: PlayerView = match.playerView(actor.seat);
+    if (view.legalActions.length === 0) {
+      return {
+        finished: false,
+        seatWinner: null,
+        error: `Game ${gameSeed}: seat ${actor.seat} has no legal actions but should (hand ${s.handNumber})`,
+      };
+    }
+
+    const policy = TEAMS[actor.seat] === 0 ? policySeat0 : policySeat1;
+    const decided = policy(view);
+    const action =
+      decided ??
+      view.legalActions[fallbackRng.nextInt(view.legalActions.length)]!;
+
+    // Contagem de truco pela ação escolhida (antes do dispatch)
+    if (action.type === "truco") {
+      const level =
+        view.trucoPendingValue ??
+        (action.action === "raise"
+          ? nextPendingTruco(view.trucoValue, ruleset)
+          : view.trucoValue);
+      if (action.action === "accept")
+        bump(diagnostics.trucoAcceptByLevel, level);
+      else if (action.action === "run")
+        bump(diagnostics.trucoRunByLevel, level);
+      else if (action.action === "raise")
+        bump(diagnostics.trucoRaiseByLevel, level);
+    }
+
+    const result = match.dispatch(actor.seat, action);
+    if (!result.success) {
+      return {
+        finished: false,
+        seatWinner: null,
+        error: `Game ${gameSeed}: unexpected rejection "${result.error}" for action ${JSON.stringify(action)} at seat ${actor.seat}`,
+      };
+    }
+
+    for (const ev of result.events) {
+      if (ev.type === "elevenDecided") {
+        elevenPlayedThisHand = ev.decision === "play";
+        lastHandWasEleven = true;
+      }
+      if (ev.type === "handFinished") {
+        lastHandTentos = ev.tentos;
+        lastHandWinner = ev.winnerTeam;
+        if (elevenPlayedThisHand && elevenTeamThisHand !== null) {
+          lastHandElevenPlayed = elevenTeamThisHand;
+        } else {
+          lastHandElevenPlayed = null;
+        }
+        if (ev.reason === "run") diagnostics.pointsFromRun += ev.tentos;
+        elevenTeamThisHand = null;
+        elevenPlayedThisHand = false;
+      }
+      if (ev.type === "handStarted") {
+        lastHandWasEleven = false;
+        lastHandElevenPlayed = null;
+        elevenTeamThisHand = null;
+        elevenPlayedThisHand = false;
+      }
+    }
+
+    actionCount++;
+  }
+
+  return { finished: false, seatWinner: null, error: null };
+}
+
+function nextPendingTruco(current: number, ruleset: RuleSet): number {
+  const seq = ruleset.trucoSequence;
+  const idx = seq.indexOf(current);
+  if (idx === -1 || idx >= seq.length - 1) return current;
+  return seq[idx + 1]!;
 }
 
 // ---- Encontrar actor ------------------------------------------------
