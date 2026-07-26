@@ -240,6 +240,24 @@ describe("match basic flow", () => {
     expect(match.state().dealerSeat).toBe(2);
   });
 
+  it("accepts initialScores and initialDealerSeat", () => {
+    const match = createMatch(paulista, 42, {
+      initialScores: [5, 3],
+      initialDealerSeat: 1,
+    });
+    expect(match.state().scores).toEqual([5, 3]);
+    expect(match.state().dealerSeat).toBe(1);
+    expect(match.state().phase).toBe("playing");
+  });
+
+  it("matchFinished when initialScores already won", () => {
+    const match = createMatch(paulista, 42, {
+      initialScores: [12, 4],
+    });
+    expect(match.state().phase).toBe("matchFinished");
+    expect(match.state().scores).toEqual([12, 4]);
+  });
+
   it("playerView hides other players cards", () => {
     const match = createMatch(paulista, 42);
     const view0 = match.playerView(0);
@@ -247,6 +265,9 @@ describe("match basic flow", () => {
 
     expect(view0.handCards).toHaveLength(3);
     expect(view1.handCards).toHaveLength(3);
+    // F7: view normal nunca carrega allHands
+    expect(view0.allHands).toBeUndefined();
+    expect(view1.allHands).toBeUndefined();
 
     // Views should show different cards
     const cards0 = new Set(view0.handCards.map((c) => `${c.rank}-${c.suit}`));
@@ -255,6 +276,19 @@ describe("match basic flow", () => {
     // Just verify they're non-empty
     expect(cards0.size).toBe(3);
     expect(cards1.size).toBe(3);
+  });
+
+  it("revealAllHands exposes every seat only when opted in", () => {
+    const normal = createMatch(paulista, 42);
+    expect(normal.playerView(0).allHands).toBeUndefined();
+
+    const oracle = createMatch(paulista, 42, { revealAllHands: true });
+    const view = oracle.playerView(0);
+    expect(view.allHands).toHaveLength(4);
+    expect(view.allHands![0]).toEqual(view.handCards);
+    expect(view.allHands![1]).toHaveLength(3);
+    expect(view.allHands![2]).toHaveLength(3);
+    expect(view.allHands![3]).toHaveLength(3);
   });
 
   it("hand plays through 3 vazas and awards tentos", () => {

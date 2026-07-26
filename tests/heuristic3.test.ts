@@ -24,6 +24,7 @@ describe("Heuristic Bot v3", () => {
     trucoValue: 1,
     trucoPendingTeam: null,
     trucoPendingValue: null,
+    trucoRaises: [],
     isElevenHand: false,
     isFerro: false,
     elevenDecision: null,
@@ -42,6 +43,7 @@ describe("Heuristic Bot v3", () => {
       distanceToTwelve: false,
       softOverrides: false,
       topTwoStrength: false,
+      useEvTruco: false,
       ...overrides,
     };
   }

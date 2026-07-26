@@ -172,6 +172,20 @@ function shuffleInPlace<T>(arr: T[], rng: Rng): void {
 }
 
 function sampleDeterminization(view: PlayerView, rng: Rng): World {
+  // Oráculo F7: mundo verdadeiro quando a arena revelou allHands
+  if (view.allHands) {
+    return {
+      vira: view.vira,
+      dealerSeat: view.dealerSeat,
+      hands: view.allHands.map((h) => [...h]) as [
+        Card[],
+        Card[],
+        Card[],
+        Card[],
+      ],
+    };
+  }
+
   const mySeat = view.mySeat;
   const partnerSeat = partnerSeatOf(mySeat);
   const knownSeats = new Set<Seat>([mySeat]);
@@ -248,7 +262,6 @@ function buildPlayView(
     mySeat: seat,
     dealerSeat: world.dealerSeat,
     handCards,
-    partnerCards: undefined,
     vira: world.vira,
     completedVazas: vazas,
     currentVaza: cv,
@@ -256,6 +269,7 @@ function buildPlayView(
     trucoValue,
     trucoPendingTeam: null,
     trucoPendingValue: null,
+    trucoRaises: [],
     isElevenHand: false,
     isFerro: false,
     elevenDecision: null,
@@ -284,7 +298,6 @@ function buildTrucoView(
     mySeat: seat,
     dealerSeat: world.dealerSeat,
     handCards: world.hands[seat],
-    partnerCards: undefined,
     vira: world.vira,
     completedVazas: vazas,
     currentVaza: cv,
@@ -292,6 +305,7 @@ function buildTrucoView(
     trucoValue,
     trucoPendingTeam: pendingTeam,
     trucoPendingValue: pendingValue,
+    trucoRaises: [],
     isElevenHand: false,
     isFerro: false,
     elevenDecision: null,

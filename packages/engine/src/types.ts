@@ -193,6 +193,7 @@ export interface HandState {
   readonly trucoValue: number;
   readonly trucoPendingTeam: Team | null;
   readonly trucoPendingValue: number | null;
+  readonly trucoRaises: readonly TrucoRaiseRecord[];
   readonly isElevenHand: boolean;
   readonly isFerro: boolean;
   readonly elevenDecision: "play" | "run" | null;
@@ -216,6 +217,13 @@ export interface VazaInProgress {
 
 // ---- Estado interno mutável (não exportado do barrel) ---------------
 
+export interface TrucoRaiseRecord {
+  readonly seat: Seat;
+  readonly team: Team;
+  readonly pendingValue: number;
+  readonly vazaIndex: number;
+}
+
 /** Versão mutável de HandState para uso interno do engine. */
 export interface MutableHandState {
   vira: Card;
@@ -226,6 +234,8 @@ export interface MutableHandState {
   trucoPendingTeam: Team | null;
   trucoPendingValue: number | null;
   trucoLastRaiser: Team | null;
+  /** Histórico público de raises nesta mão (E2 features de aposta). */
+  trucoRaises: TrucoRaiseRecord[];
   isElevenHand: boolean;
   isFerro: boolean;
   elevenDecision: "play" | "run" | null;
@@ -249,10 +259,21 @@ export interface PlayerView {
   readonly trucoValue: number;
   readonly trucoPendingTeam: Team | null;
   readonly trucoPendingValue: number | null;
+  /**
+   * Raises desta mão (público). Usado pelo bot v4 para features de aposta.
+   * Vazio se ninguém pediu truco ainda.
+   */
+  readonly trucoRaises: readonly TrucoRaiseRecord[];
   readonly isElevenHand: boolean;
   readonly isFerro: boolean;
   readonly elevenDecision: "play" | "run" | null;
   readonly legalActions: readonly Action[];
+  /**
+   * Mãos de todos os assentos (cartas ainda na mão). Só preenchido quando
+   * `createMatch(..., { revealAllHands: true })` — medição/oráculo.
+   * // ponytail: campo de medição, nunca ligado em produção
+   */
+  readonly allHands?: readonly (readonly Card[])[];
 }
 
 // ---- Metadados públicos (para replay) ------------------------------

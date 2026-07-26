@@ -155,6 +155,32 @@ export interface ArenaConfig {
    * são atribuídas à política (não ao assento). Cancela viés posicional.
    */
   mirrored?: boolean;
+  /** Expõe `PlayerView.allHands` (oráculo F7). Default false. */
+  revealAllHands?: boolean;
+  /** Placar inicial (W-table / E1). Default [0, 0]. */
+  initialScores?: readonly [number, number];
+  /** Dealer inicial (W-table / E1). Default 0. */
+  initialDealerSeat?: Seat;
+  /**
+   * Coleta E2/E5: turno com truco no menu (`decision`), raise emitido
+   * (`raise`), resolução accept/run/re-raise (`raiseResolved`), ou fim de
+   * mão (`handResult`). Engine não extrai features — o caller faz.
+   */
+  collect?: (row: ArenaCollectRow) => void;
+}
+
+export interface ArenaCollectRow {
+  phase: "decision" | "handResult" | "raise" | "raiseResolved";
+  handId: string;
+  seat?: Seat;
+  view?: PlayerView;
+  winnerTeam?: 0 | 1;
+  /** Nível proposto no raise (trucoSequence value). */
+  proposedLevel?: number;
+  /** raiseResolved: adversário correu? */
+  opponentRan?: boolean;
+  /** raiseResolved: aceitou (não re-raise)? */
+  opponentAccepted?: boolean;
 }
 
 export interface ArenaDiagnostics {
@@ -237,6 +263,10 @@ export function runArena(config: ArenaConfig): ArenaResult {
     maxActions = 5000,
     ruleset = paulista,
     mirrored = false,
+    revealAllHands = false,
+    initialScores,
+    initialDealerSeat,
+    collect,
   } = config;
 
   const start = performance.now();
@@ -275,6 +305,10 @@ export function runArena(config: ArenaConfig): ArenaResult {
         ruleset,
         fallbackRng,
         diagnostics,
+        revealAllHands,
+        ...(initialScores !== undefined ? { initialScores } : {}),
+        ...(initialDealerSeat !== undefined ? { initialDealerSeat } : {}),
+        ...(collect !== undefined ? { collect } : {}),
       });
       if (outcome.error) errors.push(outcome.error);
       if (!outcome.finished || outcome.seatWinner === null) {
@@ -316,6 +350,10 @@ function runSingleMatch(args: {
   ruleset: RuleSet;
   fallbackRng: ReturnType<typeof createPRNG>;
   diagnostics: ArenaDiagnostics;
+  revealAllHands: boolean;
+  initialScores?: readonly [number, number];
+  initialDealerSeat?: Seat;
+  collect?: (row: ArenaCollectRow) => void;
 }): SingleMatchOutcome {
   const {
     gameSeed,
@@ -326,8 +364,25 @@ function runSingleMatch(args: {
     ruleset,
     fallbackRng,
     diagnostics,
+    revealAllHands,
+    initialScores,
+    initialDealerSeat,
+    collect,
   } = args;
-  const match = createMatch(ruleset, gameSeed);
+  const match = createMatch(ruleset, gameSeed, {
+    revealAllHands,
+    ...(initialScores !== undefined ? { initialScores } : {}),
+    ...(initialDealerSeat !== undefined ? { initialDealerSeat } : {}),
+  });
+
+  // Já terminou no placar inicial (células W com a≥12 ou b≥12).
+  {
+    const s0 = match.state();
+    if (s0.phase === "matchFinished") {
+      const seatWinner: 0 | 1 = s0.scores[0] >= ruleset.winThreshold ? 0 : 1;
+      return { finished: true, seatWinner, error: null };
+    }
+  }
 
   let actionCount = 0;
   let lastHandTentos = 0;
@@ -336,6 +391,8 @@ function runSingleMatch(args: {
   let lastHandWinner: 0 | 1 | null = null;
   let elevenTeamThisHand: 0 | 1 | null = null;
   let elevenPlayedThisHand = false;
+  /** Raise aguardando resposta (E5: label de q). */
+  let openRaise: { handId: string; seat: Seat } | null = null;
 
   while (actionCount < maxActions) {
     const s = match.state();
@@ -401,6 +458,11 @@ function runSingleMatch(args: {
       };
     }
 
+    const handId = `${gameSeed}:${s.handNumber}`;
+    if (collect && view.legalActions.some((a) => a.type === "truco")) {
+      collect({ phase: "decision", handId, seat: actor.seat, view });
+    }
+
     const policy = TEAMS[actor.seat] === 0 ? policySeat0 : policySeat1;
     const decided = policy(view);
     const action =
@@ -408,6 +470,11 @@ function runSingleMatch(args: {
       view.legalActions[fallbackRng.nextInt(view.legalActions.length)]!;
 
     // Contagem de truco pela ação escolhida (antes do dispatch)
+    let raiseCollect: {
+      seat: Seat;
+      view: PlayerView;
+      proposedLevel: number;
+    } | null = null;
     if (action.type === "truco") {
       const level =
         view.trucoPendingValue ??
@@ -418,8 +485,15 @@ function runSingleMatch(args: {
         bump(diagnostics.trucoAcceptByLevel, level);
       else if (action.action === "run")
         bump(diagnostics.trucoRunByLevel, level);
-      else if (action.action === "raise")
+      else if (action.action === "raise") {
         bump(diagnostics.trucoRaiseByLevel, level);
+        // Coleta depois dos events (raiseResolved do raise anterior primeiro)
+        raiseCollect = {
+          seat: actor.seat,
+          view,
+          proposedLevel: level,
+        };
+      }
     }
 
     const result = match.dispatch(actor.seat, action);
@@ -436,6 +510,45 @@ function runSingleMatch(args: {
         elevenPlayedThisHand = ev.decision === "play";
         lastHandWasEleven = true;
       }
+      if (ev.type === "trucoRaised") {
+        if (
+          collect &&
+          openRaise &&
+          openRaise.handId === handId &&
+          openRaise.seat !== ev.seat
+        ) {
+          // Re-raise: adversário não correu
+          collect({
+            phase: "raiseResolved",
+            handId,
+            opponentRan: false,
+            opponentAccepted: false,
+          });
+        }
+        openRaise = { handId, seat: ev.seat };
+      }
+      if (ev.type === "trucoAccepted") {
+        if (collect && openRaise && openRaise.handId === handId) {
+          collect({
+            phase: "raiseResolved",
+            handId,
+            opponentRan: false,
+            opponentAccepted: true,
+          });
+        }
+        openRaise = null;
+      }
+      if (ev.type === "trucoRan") {
+        if (collect && openRaise && openRaise.handId === handId) {
+          collect({
+            phase: "raiseResolved",
+            handId,
+            opponentRan: true,
+            opponentAccepted: false,
+          });
+        }
+        openRaise = null;
+      }
       if (ev.type === "handFinished") {
         lastHandTentos = ev.tentos;
         lastHandWinner = ev.winnerTeam;
@@ -445,6 +558,14 @@ function runSingleMatch(args: {
           lastHandElevenPlayed = null;
         }
         if (ev.reason === "run") diagnostics.pointsFromRun += ev.tentos;
+        if (collect) {
+          collect({
+            phase: "handResult",
+            handId,
+            winnerTeam: ev.winnerTeam,
+          });
+        }
+        openRaise = null;
         elevenTeamThisHand = null;
         elevenPlayedThisHand = false;
       }
@@ -453,7 +574,18 @@ function runSingleMatch(args: {
         lastHandElevenPlayed = null;
         elevenTeamThisHand = null;
         elevenPlayedThisHand = false;
+        openRaise = null;
       }
+    }
+
+    if (collect && raiseCollect) {
+      collect({
+        phase: "raise",
+        handId,
+        seat: raiseCollect.seat,
+        view: raiseCollect.view,
+        proposedLevel: raiseCollect.proposedLevel,
+      });
     }
 
     actionCount++;

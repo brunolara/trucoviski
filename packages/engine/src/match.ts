@@ -46,6 +46,17 @@ interface Internal {
   ruleset: RuleSet;
   seed: number;
   rng: ReturnType<typeof createPRNG>;
+  /** // ponytail: campo de medição, nunca ligado em produção */
+  revealAllHands: boolean;
+}
+
+export interface CreateMatchOptions {
+  /** Expõe `PlayerView.allHands` (oráculo / teto F7). Default false. */
+  revealAllHands?: boolean;
+  /** Placar inicial (E1 / W-table). Default [0, 0]. */
+  initialScores?: readonly [number, number];
+  /** Dealer inicial (E1 / W-table). Default 0. */
+  initialDealerSeat?: Seat;
 }
 
 // ---- API pública ----------------------------------------------------
@@ -53,6 +64,7 @@ interface Internal {
 export function createMatch(
   ruleset: RuleSet,
   seed: number,
+  opts?: CreateMatchOptions,
 ): {
   state: () => MatchState;
   metadata: MatchMetadata;
@@ -60,18 +72,29 @@ export function createMatch(
   dispatch: (seat: Seat, action: Action) => ActionResult;
 } {
   const rng = createPRNG(seed);
+  const initScores = opts?.initialScores;
   const m: Internal = {
     phase: "dealing",
     handNumber: 0,
-    dealerSeat: 0,
-    scores: [0, 0],
+    dealerSeat: opts?.initialDealerSeat ?? 0,
+    scores: initScores
+      ? ([initScores[0], initScores[1]] as [number, number])
+      : [0, 0],
     hand: null,
     ruleset,
     seed,
     rng,
+    revealAllHands: opts?.revealAllHands === true,
   };
 
-  startNextHand(m);
+  if (
+    m.scores[0] >= ruleset.winThreshold ||
+    m.scores[1] >= ruleset.winThreshold
+  ) {
+    m.phase = "matchFinished";
+  } else {
+    startNextHand(m);
+  }
 
   function state(): MatchState {
     return {
@@ -186,6 +209,7 @@ function buildNewHand(
     trucoPendingTeam: null,
     trucoPendingValue: null,
     trucoLastRaiser: null,
+    trucoRaises: [],
     isElevenHand: isElevenHand && !isFerro,
     isFerro,
     elevenDecision: null,
@@ -452,6 +476,12 @@ function doTruco(
       }
       h.trucoPendingValue = nextVal;
       h.trucoPendingTeam = TEAMS[seat] as Team;
+      h.trucoRaises.push({
+        seat,
+        team: TEAMS[seat] as Team,
+        pendingValue: nextVal,
+        vazaIndex: h.completedVazas.length,
+      });
       return {
         success: true,
         events: [{ type: "trucoRaised", seat, pendingValue: nextVal }],
@@ -468,6 +498,12 @@ function doTruco(
     const nextVal = nextTrucoLevel(h.trucoValue, m.ruleset);
     h.trucoPendingValue = nextVal;
     h.trucoPendingTeam = TEAMS[seat] as Team;
+    h.trucoRaises.push({
+      seat,
+      team: TEAMS[seat] as Team,
+      pendingValue: nextVal,
+      vazaIndex: h.completedVazas.length,
+    });
     return {
       success: true,
       events: [{ type: "trucoRaised", seat, pendingValue: nextVal }],
@@ -586,6 +622,7 @@ function computePlayerView(m: Internal, seat: Seat): PlayerView {
       trucoValue: 0,
       trucoPendingTeam: null,
       trucoPendingValue: null,
+      trucoRaises: [],
       isElevenHand: false,
       isFerro: false,
       elevenDecision: null,
@@ -599,13 +636,22 @@ function computePlayerView(m: Internal, seat: Seat): PlayerView {
       ? h.cards[((seat + 2) % 4) as Seat].map(deepCopyCard)
       : undefined;
   const legal = computeLegalActions(m, h, seat);
+  // ponytail: campo de medição, nunca ligado em produção
+  const allHands = m.revealAllHands
+    ? (h.cards.map((c) => c.map(deepCopyCard)) as [
+        Card[],
+        Card[],
+        Card[],
+        Card[],
+      ])
+    : undefined;
 
   return {
     handNumber: m.handNumber,
     mySeat: seat,
     dealerSeat: h.dealerSeat,
     handCards,
-    partnerCards,
+    ...(partnerCards !== undefined ? { partnerCards } : {}),
     vira: deepCopyCard(h.vira),
     completedVazas: h.completedVazas.map(copyCompletedVaza),
     currentVaza: h.currentVaza ? copyVazaInProgress(h.currentVaza) : null,
@@ -613,10 +659,12 @@ function computePlayerView(m: Internal, seat: Seat): PlayerView {
     trucoValue: h.trucoValue,
     trucoPendingTeam: h.trucoPendingTeam,
     trucoPendingValue: h.trucoPendingValue,
+    trucoRaises: h.trucoRaises.map((r) => ({ ...r })),
     isElevenHand: h.isElevenHand,
     isFerro: h.isFerro,
     elevenDecision: h.elevenDecision,
     legalActions: legal,
+    ...(allHands !== undefined ? { allHands } : {}),
   };
 }
 
@@ -722,6 +770,7 @@ function freezeHand(h: MutableHandState): HandState {
     trucoValue: h.trucoValue,
     trucoPendingTeam: h.trucoPendingTeam,
     trucoPendingValue: h.trucoPendingValue,
+    trucoRaises: h.trucoRaises.map((r) => ({ ...r })),
     isElevenHand: h.isElevenHand,
     isFerro: h.isFerro,
     elevenDecision: h.elevenDecision,

@@ -1,0 +1,39 @@
+{
+  "trained": true,
+  "w": [
+    -16.841238864786494, 13.236254286697074, -0.07520022085869493,
+    -1.7641700899927755, -0.8650925895341095, 2.579747228768431,
+    0.6405537076406569, 0.06372876156961575, -0.27604374393346465,
+    -0.04757442280914494, -1.7641700899927755, -2.0196816728942704,
+    0.9153268878920915, 0.0, 0.0, 0.24952952221424674, -1.477566377214022, 0.0,
+    0.7066282574974515, 1.0924424933957815, 1.30044991407175, 0.9146356781732764
+  ],
+  "b": 2.057940197328503,
+  "t": 1.0559471914806193,
+  "features": [
+    "proposedLevel",
+    "currentTrucoLevel",
+    "won1",
+    "lost1",
+    "tied1",
+    "vazaIndex",
+    "cardsPlayedInVaza",
+    "partnerIsWinning",
+    "beatsTable",
+    "isLastToPlay",
+    "mustWinBoth",
+    "oppRaiseCount",
+    "oppRaiseAfterLostFirst",
+    "raiserMe",
+    "raiserPartner",
+    "raiserOpp",
+    "raiseVaza",
+    "isEleven",
+    "scoreUs",
+    "scoreThem",
+    "distToWin",
+    "distToLose"
+  ],
+  "brier": 0.20250532626450568,
+  "max_cal_err": 0.05099737583680908
+}

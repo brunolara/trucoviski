@@ -17,6 +17,7 @@ describe("botAdvice", () => {
     trucoValue: 1,
     trucoPendingTeam: null,
     trucoPendingValue: null,
+    trucoRaises: [],
     isElevenHand: false,
     isFerro: false,
     elevenDecision: null,

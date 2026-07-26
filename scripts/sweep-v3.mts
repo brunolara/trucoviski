@@ -14,41 +14,14 @@ import { V3_FEATURES } from "../packages/bots/src/index.js";
 import type { HeuristicV2Features } from "../packages/bots/src/index.js";
 import { evaluate, V2_VS_V1_BASELINE } from "./sweep-eval.mts";
 import type { CandidateResult } from "./sweep-eval.mts";
+import { climbChain, KNOB_RANGES } from "./sweep-climb.mts";
+import type { KnobKey } from "./sweep-climb.mts";
 
 const TRAIN_SEED = 42;
 const TEST_SEED = 1_000_003;
 
 const WORKER = fileURLToPath(new URL("./sweep-worker.mts", import.meta.url));
-const POOL_SIZE = Math.max(1, Math.min(cpus().length - 2, 10));
-
-type KnobKey =
-  | "responseBaseOffset"
-  | "proposeBaseOffset"
-  | "elevenPairFloor"
-  | "positionBeatsBonus"
-  | "positionInfoBonus"
-  | "raiseGuardMaxLevel"
-  | "distDangerWeight"
-  | "distFinishWeight"
-  | "runCostWeight"
-  | "softTopAliveBonus"
-  | "softWonFirstBonus";
-
-const KNOB_RANGES: Record<KnobKey, { min: number; max: number; step: number }> =
-  {
-    responseBaseOffset: { min: -1, max: 5, step: 0.5 },
-    proposeBaseOffset: { min: -1, max: 5, step: 0.5 },
-    elevenPairFloor: { min: 6, max: 10, step: 1 },
-    // F5.2: knobs assinados — arena escolhe o sinal
-    positionBeatsBonus: { min: -0.15, max: 0.15, step: 0.03 },
-    positionInfoBonus: { min: -0.15, max: 0.15, step: 0.03 },
-    raiseGuardMaxLevel: { min: 6, max: 12, step: 3 },
-    distDangerWeight: { min: 0.0, max: 0.2, step: 0.02 },
-    distFinishWeight: { min: 0.0, max: 0.2, step: 0.02 },
-    runCostWeight: { min: 0.0, max: 0.25, step: 0.025 },
-    softTopAliveBonus: { min: 0.1, max: 0.45, step: 0.05 },
-    softWonFirstBonus: { min: 0.1, max: 0.4, step: 0.05 },
-  };
+const DEFAULT_POOL = Math.max(1, Math.min(cpus().length - 2, 10));
 
 const FLAG_KEYS = [
   "elevenNeedsPair",
@@ -59,21 +32,74 @@ const FLAG_KEYS = [
   "topTwoStrength",
 ] as const;
 
+interface EvalJob {
+  kind: "eval";
+  features: HeuristicV2Features;
+  games: number;
+  seed: number;
+  vsV2Only?: boolean;
+}
+
+interface ClimbJob {
+  kind: "climb";
+  start: CandidateResult;
+  games: number;
+  seed: number;
+  vsV2Only?: boolean;
+}
+
+type PoolJob = EvalJob | ClimbJob;
+
+interface EvalPoolResult {
+  kind: "eval";
+  result: CandidateResult;
+  elapsedMs: number;
+}
+
+interface ClimbPoolResult {
+  kind: "climb";
+  result: CandidateResult;
+  evals: number;
+  discarded: number;
+  elapsedMs: number;
+}
+
+type PoolResult = EvalPoolResult | ClimbPoolResult;
+
 /**
  * Avalia `jobs` em paralelo e devolve os resultados NA MESMA ORDEM da entrada.
  * A ordem importa: o sweep desempata por posição e precisa ser determinístico.
  */
-function evaluateAll(
-  jobs: { features: HeuristicV2Features; games: number; seed: number }[],
-): Promise<CandidateResult[]> {
+function runPool(jobs: PoolJob[], poolSize: number): Promise<PoolResult[]> {
   if (jobs.length === 0) return Promise.resolve([]);
-  // Um job só: evita fork overhead (ex.: vizinho único no hill climb).
+  // Um job só: evita fork overhead (ex.: vizinho único / climb-top 1).
   if (jobs.length === 1) {
     const j = jobs[0]!;
-    return Promise.resolve([evaluate(j.features, j.games, j.seed)]);
+    const t0 = performance.now();
+    if (j.kind === "climb") {
+      const c = climbChain(j.start, j.games, j.seed, j.vsV2Only === true);
+      return Promise.resolve([
+        {
+          kind: "climb",
+          result: c.result,
+          evals: c.evals,
+          discarded: c.discarded,
+          elapsedMs: performance.now() - t0,
+        },
+      ]);
+    }
+    return Promise.resolve([
+      {
+        kind: "eval",
+        result: evaluate(j.features, j.games, j.seed, {
+          vsV2Only: j.vsV2Only === true,
+        }),
+        elapsedMs: performance.now() - t0,
+      },
+    ]);
   }
   return new Promise((resolve, reject) => {
-    const results: CandidateResult[] = new Array(jobs.length);
+    const results: PoolResult[] = new Array(jobs.length);
     let next = 0;
     let done = 0;
     const workers: ChildProcess[] = [];
@@ -90,10 +116,9 @@ function evaluateAll(
       if (settled) return;
       settled = true;
       workers.forEach((w) => w.kill());
-      // Garante que nenhum slot ficou vazio (mensagem perdida)
       for (let i = 0; i < results.length; i++) {
         if (results[i] == null) {
-          fail(new Error(`evaluateAll: missing result for job ${i}`));
+          fail(new Error(`runPool: missing result for job ${i}`));
           return;
         }
       }
@@ -106,7 +131,7 @@ function evaluateAll(
       w.send({ id, ...jobs[id]! });
     };
 
-    for (let i = 0; i < Math.min(POOL_SIZE, jobs.length); i++) {
+    for (let i = 0; i < Math.min(poolSize, jobs.length); i++) {
       const w = fork(WORKER, [], { execArgv: ["--import", "tsx"] });
       workers.push(w);
       w.on(
@@ -114,7 +139,11 @@ function evaluateAll(
         (msg: {
           type: string;
           id?: number;
+          kind?: string;
           result?: CandidateResult;
+          evals?: number;
+          discarded?: number;
+          elapsedMs?: number;
           error?: string;
         }) => {
           if (msg.type === "ready") {
@@ -126,10 +155,28 @@ function evaluateAll(
             return;
           }
           if (msg.type !== "result" || msg.id == null || msg.result == null) {
-            fail(new Error(`worker sent unexpected message: ${JSON.stringify(msg)}`));
+            fail(
+              new Error(
+                `worker sent unexpected message: ${JSON.stringify(msg)}`,
+              ),
+            );
             return;
           }
-          results[msg.id] = msg.result;
+          if (msg.kind === "climb") {
+            results[msg.id] = {
+              kind: "climb",
+              result: msg.result,
+              evals: msg.evals ?? 0,
+              discarded: msg.discarded ?? 0,
+              elapsedMs: msg.elapsedMs ?? 0,
+            };
+          } else {
+            results[msg.id] = {
+              kind: "eval",
+              result: msg.result,
+              elapsedMs: msg.elapsedMs ?? 0,
+            };
+          }
           done++;
           if (done === jobs.length) succeed();
           else feed(w);
@@ -146,6 +193,56 @@ function evaluateAll(
   });
 }
 
+async function evaluateAll(
+  jobs: {
+    features: HeuristicV2Features;
+    games: number;
+    seed: number;
+    vsV2Only?: boolean;
+  }[],
+  poolSize: number,
+): Promise<{
+  results: CandidateResult[];
+  elapsedMs: number;
+  discarded: number;
+}> {
+  const pool = await runPool(
+    jobs.map((j) => ({ kind: "eval" as const, ...j })),
+    poolSize,
+  );
+  let elapsedMs = 0;
+  let discarded = 0;
+  const results: CandidateResult[] = [];
+  for (const r of pool) {
+    if (r.kind !== "eval")
+      throw new Error("evaluateAll: unexpected climb result");
+    results.push(r.result);
+    elapsedMs += r.elapsedMs;
+    if (r.result.discarded) discarded++;
+  }
+  return { results, elapsedMs, discarded };
+}
+
+async function climbAll(
+  jobs: {
+    start: CandidateResult;
+    games: number;
+    seed: number;
+    vsV2Only?: boolean;
+  }[],
+  poolSize: number,
+): Promise<ClimbPoolResult[]> {
+  const pool = await runPool(
+    jobs.map((j) => ({ kind: "climb" as const, ...j })),
+    poolSize,
+  );
+  return pool.map((r, i) => {
+    if (r.kind !== "climb")
+      throw new Error(`climbAll: unexpected eval at ${i}`);
+    return r;
+  });
+}
+
 function parseArgv(argv: string[]) {
   const args: Record<string, string> = {};
   for (let i = 0; i < argv.length; i++) {
@@ -159,17 +256,6 @@ function parseArgv(argv: string[]) {
     }
   }
   return args;
-}
-
-function clampRound(
-  value: number,
-  min: number,
-  max: number,
-  step: number,
-): number {
-  const clamped = Math.min(max, Math.max(min, value));
-  const steps = Math.round((clamped - min) / step);
-  return Number((min + steps * step).toFixed(4));
 }
 
 function randomFeatures(rng: () => number): HeuristicV2Features {
@@ -189,19 +275,8 @@ function randomFeatures(rng: () => number): HeuristicV2Features {
   return f;
 }
 
-function neighbor(
-  base: HeuristicV2Features,
-  key: KnobKey,
-  dir: -1 | 1,
-): HeuristicV2Features | null {
-  const { min, max, step } = KNOB_RANGES[key];
-  const next = clampRound((base[key] as number) + dir * step, min, max, step);
-  if (next === base[key]) return null;
-  return { ...base, [key]: next };
-}
-
 function formatPct(x: number): string {
-  return `${(x * 100).toFixed(2)}%`;
+  return Number.isFinite(x) ? `${(x * 100).toFixed(2)}%` : "n/a";
 }
 
 function flagsSummary(f: HeuristicV2Features): string {
@@ -211,33 +286,50 @@ function flagsSummary(f: HeuristicV2Features): string {
 async function main() {
   const args = parseArgv(process.argv.slice(2));
   const coarseN = parseInt(args.coarse ?? "200", 10);
-  const coarseGames = parseInt(args["coarse-games"] ?? "2000", 10);
+  // E0: 10k (era 2k) — SE de fitness a 2k ≈ aceite 1e-6; ver docs/plano-bot-v4-ev.md
+  const coarseGames = parseInt(args["coarse-games"] ?? "10000", 10);
   const climbTop = parseInt(args["climb-top"] ?? "10", 10);
   const confirmTop = parseInt(args["confirm-top"] ?? "5", 10);
   const confirmGames = parseInt(args["confirm-games"] ?? "20000", 10);
   const sweepSeed = parseInt(args.seed ?? "7", 10);
+  const poolSize = parseInt(args.pool ?? String(DEFAULT_POOL), 10);
   const skipAblation = args["skip-ablation"] === "true";
+  const vsV2Only = args["vs-v2-only"] === "true";
   const outPath = args.out ?? "docs/v3-sweep-result.json";
 
   const sweepRng = createPRNG(sweepSeed);
   const rng = () => sweepRng.next();
 
   console.log(
-    `F6 sweep: coarse=${coarseN}×${coarseGames}, climb top ${climbTop}, confirm top ${confirmTop}×${confirmGames} (pool=${POOL_SIZE})`,
+    `Sweep: coarse=${coarseN}×${coarseGames}, climb top ${climbTop}, confirm top ${confirmTop}×${confirmGames} (pool=${poolSize})` +
+      (vsV2Only ? " [vs-v2-only]" : ""),
   );
   console.log(
-    `  constraint: vsV1 ≥ ${formatPct(V2_VS_V1_BASELINE)} − tol; fitness = wrVsV2 − selfPlayBig×0.15`,
+    vsV2Only
+      ? `  fitness = wrVsV2 (sem vsV1/self)`
+      : `  constraint: vsV1 ≥ ${formatPct(V2_VS_V1_BASELINE)} − tol; fitness = wrVsV2 − selfPlayBig×0.15`,
   );
 
   const t0 = performance.now();
+  let totalEvals = 0;
+  let totalCpuMs = 0;
+  const phaseWall: Record<string, number> = {};
+  const phaseDiscard: Record<string, number> = {};
 
+  // --- Coarse ---
+  const tCoarse = performance.now();
   const candidates = Array.from({ length: coarseN }, () => ({
     features: randomFeatures(rng),
     games: coarseGames,
     seed: TRAIN_SEED,
+    vsV2Only,
   }));
-  const coarse = await evaluateAll(candidates);
-  const discardedCount = coarse.filter((c) => c.discarded).length;
+  const coarseOut = await evaluateAll(candidates, poolSize);
+  const coarse = coarseOut.results;
+  totalEvals += coarseN;
+  totalCpuMs += coarseOut.elapsedMs;
+  phaseWall.coarse = (performance.now() - tCoarse) / 1000;
+  phaseDiscard.coarse = coarseOut.discarded;
   {
     const viable = coarse.filter((c) => !c.discarded);
     const best = [...viable].sort((a, b) => b.fitness - a.fitness)[0];
@@ -249,80 +341,47 @@ async function main() {
         (best
           ? `fitness=${best.fitness.toFixed(4)} vsV2=${formatPct(best.wrVsV2)} vsV1=${formatPct(best.wrVsV1)} self≥9=${(best.selfPlayBigRate * 100).toFixed(1)}%`
           : "nenhum viável ainda") +
-        ` discard=${discardedCount} flagsSample=${flagSample} ` +
-        `(${((performance.now() - t0) / 1000).toFixed(0)}s)`,
+        ` discard=${coarseOut.discarded} flagsSample=${flagSample} ` +
+        `(${phaseWall.coarse.toFixed(0)}s)`,
     );
   }
 
   coarse.sort((a, b) => b.fitness - a.fitness);
   const seeds = coarse.filter((c) => !c.discarded).slice(0, climbTop);
   console.log(
-    `\nHill climb on top ${seeds.length}/${climbTop} viable (≤40 evals each)…`,
+    `\nHill climb on top ${seeds.length}/${climbTop} viable (≤40 evals each, 1 chain/worker)…`,
   );
 
+  // --- Climb (um chain por worker) ---
+  const tClimb = performance.now();
+  const climbOut = await climbAll(
+    seeds.map((s) => ({
+      start: s,
+      games: coarseGames,
+      seed: TRAIN_SEED,
+      vsV2Only,
+    })),
+    poolSize,
+  );
+  phaseWall.climb = (performance.now() - tClimb) / 1000;
+  let climbEvals = 0;
+  let climbDiscarded = 0;
   const climbed: CandidateResult[] = [];
-  for (let i = 0; i < seeds.length; i++) {
-    let current = seeds[i]!;
-    let evals = 0;
-    const maxEvals = 40;
-
-    for (const key of Object.keys(KNOB_RANGES) as KnobKey[]) {
-      if (evals >= maxEvals) break;
-      const neighbours = [
-        neighbor(current.features, key, -1),
-        neighbor(current.features, key, 1),
-      ].filter((f): f is HeuristicV2Features => f !== null);
-      if (neighbours.length === 0) continue;
-      // Cap: não ultrapassar maxEvals
-      const batch = neighbours.slice(0, maxEvals - evals);
-      evals += batch.length;
-      const evs = await evaluateAll(
-        batch.map((f) => ({
-          features: f,
-          games: coarseGames,
-          seed: TRAIN_SEED,
-        })),
-      );
-      for (const ev of evs)
-        if (!ev.discarded && ev.fitness > current.fitness + 1e-6) current = ev;
-    }
-
-    for (const key of Object.keys(KNOB_RANGES) as KnobKey[]) {
-      if (evals >= maxEvals) break;
-      const { min, max, step } = KNOB_RANGES[key];
-      if (step >= 1) continue;
-      const halfNeighbours: HeuristicV2Features[] = [];
-      for (const dir of [-1, 1] as const) {
-        const half = clampRound(
-          (current.features[key] as number) + dir * step * 0.5,
-          min,
-          max,
-          step * 0.5,
-        );
-        if (half === current.features[key]) continue;
-        halfNeighbours.push({ ...current.features, [key]: half });
-      }
-      if (halfNeighbours.length === 0) continue;
-      const batch = halfNeighbours.slice(0, maxEvals - evals);
-      evals += batch.length;
-      const evs = await evaluateAll(
-        batch.map((f) => ({
-          features: f,
-          games: coarseGames,
-          seed: TRAIN_SEED,
-        })),
-      );
-      for (const ev of evs)
-        if (!ev.discarded && ev.fitness > current.fitness + 1e-6) current = ev;
-    }
-
-    climbed.push(current);
+  for (let i = 0; i < climbOut.length; i++) {
+    const c = climbOut[i]!;
+    climbed.push(c.result);
+    climbEvals += c.evals;
+    climbDiscarded += c.discarded;
+    totalCpuMs += c.elapsedMs;
     console.log(
-      `  climb ${i + 1}/${seeds.length}: fitness=${current.fitness.toFixed(4)} ` +
-        `vsV2=${formatPct(current.wrVsV2)} vsV1=${formatPct(current.wrVsV1)} ` +
-        `self≥9=${(current.selfPlayBigRate * 100).toFixed(1)}% evals=${evals}`,
+      `  climb ${i + 1}/${climbOut.length}: fitness=${c.result.fitness.toFixed(4)} ` +
+        `vsV2=${formatPct(c.result.wrVsV2)} vsV1=${formatPct(c.result.wrVsV1)} ` +
+        `self≥9=${Number.isFinite(c.result.selfPlayBigRate) ? (c.result.selfPlayBigRate * 100).toFixed(1) : "n/a"}% ` +
+        `evals=${c.evals} discard=${c.discarded} (${(c.elapsedMs / 1000).toFixed(0)}s)`,
     );
   }
+  totalEvals += climbEvals;
+  phaseDiscard.climb = climbDiscarded;
 
   climbed.sort((a, b) => b.fitness - a.fitness);
   const toConfirm = climbed.filter((c) => !c.discarded).slice(0, confirmTop);
@@ -330,13 +389,22 @@ async function main() {
     `\nConfirm top ${toConfirm.length} on TEST seeds @ ${confirmGames}…`,
   );
 
-  const confirmed = await evaluateAll(
+  // --- Confirm ---
+  const tConfirm = performance.now();
+  const confirmOut = await evaluateAll(
     toConfirm.map((c) => ({
       features: c.features,
       games: confirmGames,
       seed: TEST_SEED,
+      vsV2Only,
     })),
+    poolSize,
   );
+  const confirmed = confirmOut.results;
+  totalEvals += confirmed.length;
+  totalCpuMs += confirmOut.elapsedMs;
+  phaseWall.confirm = (performance.now() - tConfirm) / 1000;
+  phaseDiscard.confirm = confirmOut.discarded;
   for (let i = 0; i < confirmed.length; i++) {
     const c = toConfirm[i]!;
     const ev = confirmed[i]!;
@@ -356,14 +424,13 @@ async function main() {
     return;
   }
 
-  // Portão F6 (Missão): vs v2 ≥ 53.5%, vs v1 ≥ 55.2% (não regredir do v3), self ≥9 < 31.7%.
-  // A restrição dura do fitness (V2_VS_V1_BASELINE) é mais frouxa — só evita piorar vs o v2.
-  const GATE_VS_V2 = 0.535;
-  const GATE_VS_V1 = 0.552; // Missão: não regredir do 55.93% medido
+  // Portão: vs v2 ≥ 55% em modo rápido; completo mantém os três da Missão.
+  const GATE_VS_V2 = vsV2Only ? 0.55 : 0.535;
+  const GATE_VS_V1 = 0.552;
   const GATE_SELF_BIG = 0.317;
   const gateVsV2 = winner.wrVsV2 >= GATE_VS_V2;
-  const gateVsV1 = winner.wrVsV1 >= GATE_VS_V1;
-  const gateSelf = winner.selfPlayBigRate < GATE_SELF_BIG;
+  const gateVsV1 = vsV2Only || winner.wrVsV1 >= GATE_VS_V1;
+  const gateSelf = vsV2Only || winner.selfPlayBigRate < GATE_SELF_BIG;
   const gatePass = gateVsV2 && gateVsV1 && gateSelf && !winner.discarded;
 
   console.log(
@@ -371,7 +438,9 @@ async function main() {
       `self≥9=${(winner.selfPlayBigRate * 100).toFixed(1)}% self12=${(winner.selfPlay12Rate * 100).toFixed(1)}%`,
   );
   console.log(
-    `Gate: vsV2≥53.5% ${gateVsV2 ? "OK" : "FAIL"} | vsV1≥55.2% ${gateVsV1 ? "OK" : "FAIL"} | self≥9<31.7% ${gateSelf ? "OK" : "FAIL"} → ${gatePass ? "PASS" : "FAIL"}`,
+    vsV2Only
+      ? `Gate: vsV2≥55% ${gateVsV2 ? "OK" : "FAIL"} → ${gatePass ? "PASS" : "FAIL"}`
+      : `Gate: vsV2≥53.5% ${gateVsV2 ? "OK" : "FAIL"} | vsV1≥55.2% ${gateVsV1 ? "OK" : "FAIL"} | self≥9<31.7% ${gateSelf ? "OK" : "FAIL"} → ${gatePass ? "PASS" : "FAIL"}`,
   );
   console.log(JSON.stringify(winner.features, null, 2));
 
@@ -386,8 +455,11 @@ async function main() {
   }
 
   const ablation: AblationRow[] = [];
+  phaseWall.ablation = 0;
+  phaseDiscard.ablation = 0;
   if (!skipAblation && !winner.discarded) {
     console.log(`\nAblation @ ${confirmGames} test…`);
+    const tAblation = performance.now();
     const baseline = winner.fitness;
     const ablFlags = FLAG_KEYS.filter((flag) => winner.features[flag]);
     for (const flag of FLAG_KEYS) {
@@ -396,16 +468,21 @@ async function main() {
       }
     }
     if (ablFlags.length > 0) {
-      const ablationResults = await evaluateAll(
+      const ablOut = await evaluateAll(
         ablFlags.map((flag) => ({
           features: { ...winner.features, [flag]: false },
           games: confirmGames,
           seed: TEST_SEED,
+          vsV2Only,
         })),
+        poolSize,
       );
+      totalEvals += ablOut.results.length;
+      totalCpuMs += ablOut.elapsedMs;
+      phaseDiscard.ablation = ablOut.discarded;
       for (let i = 0; i < ablFlags.length; i++) {
         const flag = ablFlags[i]!;
-        const ev = ablationResults[i]!;
+        const ev = ablOut.results[i]!;
         const row = {
           flag,
           wrVsV2: ev.wrVsV2,
@@ -427,7 +504,23 @@ async function main() {
         );
       }
     }
+    phaseWall.ablation = (performance.now() - tAblation) / 1000;
   }
+
+  const elapsedSec = (performance.now() - t0) / 1000;
+  const cpuSec = totalCpuMs / 1000;
+  const util = elapsedSec > 0 ? cpuSec / (elapsedSec * poolSize) : 0;
+
+  console.log(
+    `\nphases: coarse=${phaseWall.coarse.toFixed(0)}s discard=${phaseDiscard.coarse}` +
+      ` | climb=${phaseWall.climb.toFixed(0)}s discard=${phaseDiscard.climb}` +
+      ` | confirm=${phaseWall.confirm.toFixed(0)}s discard=${phaseDiscard.confirm}` +
+      ` | ablation=${phaseWall.ablation.toFixed(0)}s discard=${phaseDiscard.ablation}`,
+  );
+  console.log(
+    `evals=${totalEvals} wall=${elapsedSec.toFixed(0)}s cpu=${cpuSec.toFixed(0)}s ` +
+      `utilização=${util.toFixed(2)} (${(util * 100).toFixed(0)}% de ${poolSize} workers)`,
+  );
 
   const payload = {
     winner,
@@ -435,7 +528,15 @@ async function main() {
     ablation,
     gatePass,
     gates: { gateVsV2, gateVsV1, gateSelf },
-    elapsedSec: (performance.now() - t0) / 1000,
+    elapsedSec,
+    timing: {
+      phases: phaseWall,
+      discard: phaseDiscard,
+      evals: totalEvals,
+      cpuSec,
+      poolSize,
+      utilization: util,
+    },
     config: {
       coarseN,
       coarseGames,
@@ -443,13 +544,14 @@ async function main() {
       confirmTop,
       confirmGames,
       sweepSeed,
+      poolSize,
       TRAIN_SEED,
       TEST_SEED,
       V2_VS_V1_BASELINE,
     },
   };
   writeFileSync(outPath, JSON.stringify(payload, null, 2));
-  console.log(`\nWrote ${outPath} in ${payload.elapsedSec.toFixed(0)}s`);
+  console.log(`\nWrote ${outPath} in ${elapsedSec.toFixed(0)}s`);
   if (!gatePass) process.exitCode = 2;
 }
 

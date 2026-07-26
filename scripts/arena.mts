@@ -17,12 +17,31 @@ import {
 import type { HeuristicV2Features } from "../packages/bots/src/index.js";
 
 type PolicyName =
-  "random" | "heuristic-v1" | "heuristic-v2" | "heuristic-v3" | "montecarlo";
+  | "random"
+  | "heuristic-v1"
+  | "heuristic-v2"
+  | "heuristic-v3"
+  | "montecarlo"
+  | "oracle"
+  /** F8: v3 joga carta; oráculo decide truco/onze/surrender. */
+  | "v3-cards-oracle-truco"
+  /** F8: oráculo joga carta; v3 decide truco/onze/surrender. */
+  | "oracle-cards-v3-truco"
+  /** F9: v3 em turnos só-carta; MC (info imperfeita) quando truco está no menu. */
+  | "v3-cards-mc-truco"
+  /** F9.2: igual, mas rollout do MC usa v3. */
+  | "v3-cards-mc-truco-v3roll";
 
 const SEED_BLOCKS = {
   train: 42,
   test: 1_000_003,
 } as const;
+
+function isCardOnly(view: PlayerView): boolean {
+  return view.legalActions.every(
+    (a) => a.type === "playCard" || a.type === "playHiddenCard",
+  );
+}
 
 function makePolicy(
   name: PolicyName,
@@ -31,6 +50,10 @@ function makePolicy(
 ): (view: PlayerView) => Action | null {
   const botRng = createPRNG(botSeed);
   const rng = () => botRng.next();
+  const v3 = (view: PlayerView) =>
+    decideHeuristicV3Action(view, rng, features ?? V3_FEATURES);
+  const oracle = (view: PlayerView) =>
+    decideMonteCarloAction(view, { rng, samples: 1 });
   switch (name) {
     case "random":
       return () => null;
@@ -40,10 +63,30 @@ function makePolicy(
       return (view) =>
         decideHeuristicV2Action(view, rng, features ?? DEFAULT_FEATURES);
     case "heuristic-v3":
-      return (view) =>
-        decideHeuristicV3Action(view, rng, features ?? V3_FEATURES);
+      return v3;
     case "montecarlo":
       return (view) => decideMonteCarloAction(view, { rng });
+    case "oracle":
+      // F7: informação perfeita + 1 amostra no mundo verdadeiro (teto fraco)
+      return oracle;
+    case "v3-cards-oracle-truco":
+      return (view) => (isCardOnly(view) ? v3(view) : oracle(view));
+    case "oracle-cards-v3-truco":
+      return (view) => (isCardOnly(view) ? oracle(view) : v3(view));
+    case "v3-cards-mc-truco":
+      return (view) =>
+        isCardOnly(view)
+          ? v3(view)
+          : decideMonteCarloAction(view, { rng, samples: 100 });
+    case "v3-cards-mc-truco-v3roll":
+      return (view) =>
+        isCardOnly(view)
+          ? v3(view)
+          : decideMonteCarloAction(view, {
+              rng,
+              samples: 100,
+              rolloutPolicy: decideHeuristicV3Action,
+            });
   }
 }
 
@@ -64,10 +107,11 @@ function parseArgv(argv: string[]) {
 
 function parseFeatures(
   json: string | undefined,
+  base: HeuristicV2Features,
 ): HeuristicV2Features | undefined {
   if (!json) return undefined;
   const partial = JSON.parse(json) as Partial<HeuristicV2Features>;
-  return { ...DEFAULT_FEATURES, ...partial };
+  return { ...base, ...partial };
 }
 
 const args = parseArgv(process.argv.slice(2));
@@ -80,12 +124,28 @@ const seed = parseInt(
   10,
 );
 const mirrored = args.mirrored !== "false";
-const featuresA = parseFeatures(args["features-a"]);
-const featuresB = parseFeatures(args["features-b"]);
+const baseA =
+  a === "heuristic-v3" || a.startsWith("v3-") || a.startsWith("oracle")
+    ? V3_FEATURES
+    : DEFAULT_FEATURES;
+const baseB =
+  b === "heuristic-v3" || b.startsWith("v3-") || b.startsWith("oracle")
+    ? V3_FEATURES
+    : DEFAULT_FEATURES;
+const featuresA = parseFeatures(args["features-a"], baseA);
+const featuresB = parseFeatures(args["features-b"], baseB);
+const revealAllHands =
+  a === "oracle" ||
+  b === "oracle" ||
+  a === "v3-cards-oracle-truco" ||
+  b === "v3-cards-oracle-truco" ||
+  a === "oracle-cards-v3-truco" ||
+  b === "oracle-cards-v3-truco";
 
 console.log(
   `Arena: ${a} (A) vs ${b} (B) — ${games} seeds` +
-    `${mirrored ? " espelhadas" : ""} (seed ${seed}, block ${seedBlock})`,
+    `${mirrored ? " espelhadas" : ""} (seed ${seed}, block ${seedBlock})` +
+    `${revealAllHands ? " [revealAllHands]" : ""}`,
 );
 
 const start = performance.now();
@@ -93,6 +153,7 @@ const result = runArena({
   games,
   seed,
   mirrored,
+  revealAllHands,
   policyTeam0: makePolicy(a, seed + 1, featuresA),
   policyTeam1: makePolicy(b, seed + 2, featuresB),
 });

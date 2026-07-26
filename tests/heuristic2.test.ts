@@ -23,6 +23,7 @@ describe("Heuristic Bot v2 (F1+F2)", () => {
     trucoValue: 1,
     trucoPendingTeam: null,
     trucoPendingValue: null,
+    trucoRaises: [],
     isElevenHand: false,
     isFerro: false,
     elevenDecision: null,

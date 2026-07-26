@@ -32,6 +32,7 @@ export type {
   TrucoAcceptedEvent,
   TrucoRaisedEvent,
   TrucoRanEvent,
+  TrucoRaiseRecord,
   TrucoAction,
   ElevenDecisionAction,
   VazaCompletedEvent,
@@ -82,11 +83,13 @@ export { paulista, teamForSeat } from "./rulesets/paulista.js";
 
 // Match (API principal)
 export { createMatch } from "./match.js";
+export type { CreateMatchOptions } from "./match.js";
 
 // Simulation
 export { runArena, runSimulation } from "./simulation.js";
 export type {
   ArenaConfig,
+  ArenaCollectRow,
   ArenaDiagnostics,
   ArenaResult,
   BotPolicy,

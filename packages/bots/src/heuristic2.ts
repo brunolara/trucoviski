@@ -14,16 +14,18 @@ import {
   paulista,
   TEAMS,
 } from "@trucoviski/engine";
-import type { Card, PlayerView, Action } from "@trucoviski/engine";
-import {
-  getCardStrength,
-  handStrength,
-  collectSeenCards,
-  strongerCardsRemaining,
-  myTeam,
-  wonFirstVaza,
-  partnerSeatOf,
-} from "./strength.js";
+import type { Card, PlayerView, Action, Team } from "@trucoviski/engine";
+import { getCardStrength, myTeam, wonFirstVaza } from "./strength.js";
+import { matchWinProb } from "./wtable.js";
+import { assessHand, myMaxStrength } from "./assessment.js";
+import type { HandAssessment } from "./assessment.js";
+import { extractTrucoFeatures, extractQFeatures } from "./features.js";
+import { winProbability, hasPModel } from "./pmodel.js";
+import { foldProbability, hasQModel } from "./qmodel.js";
+import { winProbabilityGivenCall, hasPPrimeModel } from "./pprime.js";
+
+export type { HandAssessment } from "./assessment.js";
+export { assessHand } from "./assessment.js";
 
 /** Gerador de números aleatórios injetável (default: Math.random). Permite
  * determinismo em testes/arena e blefe real em produção. */
@@ -81,6 +83,17 @@ export interface HeuristicV2Features {
   softTopAliveBonus: number;
   /** Com softOverrides: bônus (queda de limiar) por wonFirst — só no respond (F5.3). */
   softWonFirstBonus: number;
+
+  // ---- v4 EV (plano-bot-v4-ev E1.5+) ----
+  /** Decisão de truco por EV(W,p) em vez de limiares de placar. */
+  useEvTruco: boolean;
+  /**
+   * Com useEvTruco: EV também decide aumentar (respond raise + propose).
+   * false = ablation respond-only (aceitar/correr por EV; raise clássico).
+   */
+  useEvRaise: boolean;
+  /** Sharpness da sigmoide sobre EV(aceitar)−EV(correr). */
+  evSharpness: number;
 }
 
 /** Calibrado via arena: heuristic-v2 vs heuristic-v1, ~54% winrate em 24k jogos. */
@@ -110,50 +123,40 @@ export const DEFAULT_FEATURES: HeuristicV2Features = {
   runCostWeight: 0.1,
   softTopAliveBonus: 0.35,
   softWonFirstBonus: 0.22,
+  useEvTruco: false,
+  useEvRaise: true,
+  evSharpness: 30,
 };
 
 /**
- * Preset v3 — base F5 (pré-varredura). Flags/knobs recalibrados pelo sweep F5.
- * Ver docs/plano-bot-v3.md.
+ * Preset v3 — F6b (2026-07-26): F6 winner + propose mais agressivo.
+ * Medido ~55,4% vs v2 (N=16k test). Ver docs/plano-bot-v3.md.
  */
 export const V3_FEATURES: HeuristicV2Features = {
   ...DEFAULT_FEATURES,
-  responseBaseOffset: 3.5,
-  proposeBaseOffset: 2.5, // F5.3: recalibrar — o 2.0 foi treinado com double-count
+  responseBaseOffset: 5,
+  proposeBaseOffset: -1.5,
   elevenNeedsPair: true,
-  positionAware: true,
+  positionAware: false,
   raiseGuard: true,
   distanceToTwelve: true,
-  softOverrides: true,
+  softOverrides: false,
   topTwoStrength: true,
   elevenPairFloor: 9,
-  positionBeatsBonus: 0.08,
-  positionInfoBonus: 0.04,
-  raiseGuardMaxLevel: 9,
-  distDangerWeight: 0.1,
-  distFinishWeight: 0.1,
-  runCostWeight: 0.1,
-  softTopAliveBonus: 0.35,
-  softWonFirstBonus: 0.3,
+  positionBeatsBonus: 0.15,
+  positionInfoBonus: -0.06,
+  raiseGuardMaxLevel: 12,
+  distDangerWeight: 0.08,
+  distFinishWeight: 0.14,
+  runCostWeight: 0.075,
+  softTopAliveBonus: 0.4,
+  softWonFirstBonus: 0.15,
+  // E2/E5: EV+p no respond; EV+q no propose. OFF em produção até portão.
+  // (EV respond sozinho regrediu vs classic F6b; EV propose sem q explode em 12).
+  useEvTruco: false,
+  useEvRaise: true,
+  evSharpness: 30,
 };
-
-export interface HandAssessment {
-  myMax: number;
-  /** handStrength() normalizado 0..1. */
-  topTwo: number;
-  holdsTopAlive: boolean;
-  cardsPlayedInVaza: 0 | 1 | 2 | 3;
-  isLastToPlay: boolean;
-  beatsTable: boolean;
-  partnerIsWinning: boolean;
-  vazaScore: "won1" | "lost1" | "tied1" | "none";
-  mustWinBoth: boolean;
-  distToWin: number;
-  distToLose: number;
-  /** Melhor carta na mesa atual (null se vazia). */
-  bestCardOnTable: Card | null;
-  bestSeatOnTable: number | null;
-}
 
 function scoreToProbability(
   score: number,
@@ -167,87 +170,6 @@ function scoreToProbability(
   // arena e piora o bot (perde ~5-10pp de winrate vs v1 por decisão errada
   // sistemática em casos óbvios).
   return 1 / (1 + Math.exp(-sharpness * (score - threshold)));
-}
-
-function myMaxStrength(cards: readonly Card[], vira: Card): number {
-  return cards.length > 0
-    ? Math.max(...cards.map((c) => getCardStrength(c, vira)))
-    : 0;
-}
-
-/** Já carrego, na mão, a carta mais forte que ainda pode estar em jogo? */
-function holdsTopAliveCard(view: PlayerView): boolean {
-  if (view.handCards.length === 0) return false;
-  const best = view.handCards.reduce((a, b) =>
-    getCardStrength(a, view.vira) > getCardStrength(b, view.vira) ? a : b,
-  );
-  const seen = collectSeenCards(view);
-  return strongerCardsRemaining(best, view.vira, seen) === 0;
-}
-
-function firstVazaScore(view: PlayerView): HandAssessment["vazaScore"] {
-  const first = view.completedVazas[0];
-  if (!first) return "none";
-  if (first.winner === null) return "tied1";
-  return TEAMS[first.winner] === myTeam(view) ? "won1" : "lost1";
-}
-
-/** Fatos da mão calculados uma vez; decisões de truco e de carta consomem. */
-export function assessHand(view: PlayerView): HandAssessment {
-  const team = myTeam(view);
-  const oppTeam = team === 0 ? 1 : 0;
-  const myMax = myMaxStrength(view.handCards, view.vira);
-  const topTwo = handStrength(view.handCards, view.vira);
-  const holdsTopAlive = holdsTopAliveCard(view);
-  const vazaScore = firstVazaScore(view);
-
-  let bestCardOnTable: Card | null = null;
-  let bestSeatOnTable: number | null = null;
-  let cardsPlayedInVaza = 0 as 0 | 1 | 2 | 3;
-
-  if (view.currentVaza) {
-    const plays = view.currentVaza.plays;
-    let count = 0;
-    for (let i = 0; i < 4; i++) {
-      const p = plays[i];
-      if (p) {
-        count++;
-        if (
-          !bestCardOnTable ||
-          compareCards(p, bestCardOnTable, view.vira, RANKS, SUITS) > 0
-        ) {
-          bestCardOnTable = p;
-          bestSeatOnTable = i;
-        }
-      }
-    }
-    cardsPlayedInVaza = Math.min(3, count) as 0 | 1 | 2 | 3;
-  }
-
-  const partnerSeat = partnerSeatOf(view.mySeat);
-  const partnerIsWinning = bestSeatOnTable === partnerSeat;
-  const isLastToPlay = cardsPlayedInVaza === 3;
-  const beatsTable =
-    bestCardOnTable !== null &&
-    view.handCards.some(
-      (c) => compareCards(c, bestCardOnTable!, view.vira, RANKS, SUITS) > 0,
-    );
-
-  return {
-    myMax,
-    topTwo,
-    holdsTopAlive,
-    cardsPlayedInVaza,
-    isLastToPlay,
-    beatsTable,
-    partnerIsWinning,
-    vazaScore,
-    mustWinBoth: vazaScore === "lost1",
-    distToWin: 12 - view.scores[team],
-    distToLose: 12 - view.scores[oppTeam],
-    bestCardOnTable,
-    bestSeatOnTable,
-  };
 }
 
 /** Threshold de aceitar/pedir truco, ajustado pelo placar. */
@@ -371,6 +293,91 @@ function strengthScore(
   return 0.65 * (assessment.myMax / 13) + 0.35 * assessment.topTwo;
 }
 
+/** p = P(vencer a mão). Modelo logístico se treinado; senão strengthScore. */
+function handWinProb(
+  view: PlayerView,
+  assessment: HandAssessment,
+  features: HeuristicV2Features,
+): number {
+  if (hasPModel()) return winProbability(extractTrucoFeatures(view));
+  return strengthScore(assessment, features);
+}
+
+function copyScores(scores: readonly [number, number]): [number, number] {
+  return [scores[0], scores[1]];
+}
+
+/** EV de terminar a mão no valor `handValue` com prob `p` de vitória da mão. */
+function evHandAtValue(
+  p: number,
+  scores: readonly [number, number],
+  team: Team,
+  handValue: number,
+  dealerSeat: number,
+): number {
+  const win = copyScores(scores);
+  win[team] += handValue;
+  const lose = copyScores(scores);
+  lose[team === 0 ? 1 : 0] += handValue;
+  return (
+    p * matchWinProb(win, team, dealerSeat) +
+    (1 - p) * matchWinProb(lose, team, dealerSeat)
+  );
+}
+
+/** Aceita/corre (ou pede) com sigmoide sobre ΔEV — único knob de aleatoriedade. */
+function evDecisionProb(deltaEv: number, sharpness: number): number {
+  return 1 / (1 + Math.exp(-sharpness * deltaEv));
+}
+
+/**
+ * EV de aumentar para L' (E5).
+ * q · W(a+s,b) + (1−q) · [p'·W(a+L',b) + (1−p')·W(a,b+L')]
+ */
+function evRaiseToLevel(
+  view: PlayerView,
+  assessment: HandAssessment,
+  features: HeuristicV2Features,
+  currentValue: number,
+  nextLevel: number,
+): number {
+  const team = myTeam(view);
+  const q = hasQModel()
+    ? foldProbability(extractQFeatures(view, nextLevel))
+    : 0;
+  const pPrime = hasPPrimeModel()
+    ? winProbabilityGivenCall(extractTrucoFeatures(view))
+    : handWinProb(view, assessment, features);
+  const foldScores = copyScores(view.scores);
+  foldScores[team] += currentValue;
+  const evFold = matchWinProb(foldScores, team, view.dealerSeat);
+  const evShow = evHandAtValue(
+    pPrime,
+    view.scores,
+    team,
+    nextLevel,
+    view.dealerSeat,
+  );
+  return q * evFold + (1 - q) * evShow;
+}
+
+/** EV de seguir a mão no valor atual (sem aumentar). */
+function evContinueAtValue(
+  view: PlayerView,
+  assessment: HandAssessment,
+  features: HeuristicV2Features,
+  handValue: number,
+): number {
+  const p = handWinProb(view, assessment, features);
+  return evHandAtValue(
+    p,
+    view.scores,
+    myTeam(view),
+    handValue,
+    view.dealerSeat,
+  );
+}
+
 export function decideHeuristicV2Action(
   view: PlayerView,
   rng: Rng = Math.random,
@@ -472,6 +479,55 @@ export function decideHeuristicV2Action(
       }
     }
 
+    if (features.useEvTruco) {
+      const team = myTeam(view);
+      const L = atRisk;
+      const s = prevTrucoLevel(atRisk);
+      const pendingTeam = view.trucoPendingTeam ?? (team === 0 ? 1 : 0);
+      const p = handWinProb(view, assessment, features);
+      const evAccept = evHandAtValue(p, view.scores, team, L, view.dealerSeat);
+      const runScores = copyScores(view.scores);
+      runScores[pendingTeam] += s;
+      const evRun = matchWinProb(runScores, team, view.dealerSeat);
+
+      // E5: se pode aumentar e q está pronto, compare raise vs accept vs run
+      if (features.useEvRaise && canRaise && raiseAction && hasQModel()) {
+        const Lprime = nextTrucoLevel(atRisk);
+        if (!features.raiseGuard || Lprime <= features.raiseGuardMaxLevel) {
+          // Se ele correr do nosso raise, entrega L (valor pendente que aumentamos)
+          const evRaise = evRaiseToLevel(view, assessment, features, L, Lprime);
+          // Escolhe a melhor entre raise / accept / run via soft-max de 2 passos
+          const bestContinue = Math.max(evRaise, evAccept);
+          const continueIsRaise = evRaise >= evAccept;
+          const probContinue = evDecisionProb(
+            bestContinue - evRun,
+            features.evSharpness,
+          );
+          if (rng() >= probContinue) {
+            return (
+              trucoResponses.find(
+                (a) => (a as { action: string }).action === "run",
+              ) ?? null
+            );
+          }
+          if (continueIsRaise) return raiseAction;
+          return (
+            trucoResponses.find(
+              (a) => (a as { action: string }).action === "accept",
+            ) ?? null
+          );
+        }
+      }
+
+      const prob = evDecisionProb(evAccept - evRun, features.evSharpness);
+      const decision = rng() < prob ? "accept" : "run";
+      return (
+        trucoResponses.find(
+          (a) => (a as { action: string }).action === decision,
+        ) ?? null
+      );
+    }
+
     const discount =
       features.wonFirstVazaMode === "discount" && wonFirst ? 2.5 / 13 : 0;
     const base =
@@ -505,14 +561,20 @@ export function decideHeuristicV2Action(
   if (trucoProposals.length > 0) {
     const wonFirst = assessment.vazaScore === "won1";
     const nextLevel = nextTrucoLevel(view.trucoValue);
-    // raiseGuard também na proposta: não pedir 12 de graça sem mão absurda
-    if (
-      features.raiseGuard &&
-      nextLevel > features.raiseGuardMaxLevel &&
-      assessment.myMax < 12
-    ) {
+    // raiseGuard também na proposta: sem escape por manilha (myMax>=12).
+    if (features.raiseGuard && nextLevel > features.raiseGuardMaxLevel) {
       // cai pra jogar carta
+    } else if (features.useEvTruco && features.useEvRaise && hasQModel()) {
+      // E5: EV(aumentar) vs EV(seguir no valor atual)
+      const s = view.trucoValue;
+      const evRaise = evRaiseToLevel(view, assessment, features, s, nextLevel);
+      const evPass = evContinueAtValue(view, assessment, features, s);
+      const prob = evDecisionProb(evRaise - evPass, features.evSharpness);
+      if (rng() < prob) {
+        return trucoProposals[0] ?? null;
+      }
     } else {
+      // Propor: limiar clássico (EV de raise precisa de q=P(corre)).
       const base =
         (wonFirst ? 7.5 / 13 : 9.5 / 13) + features.proposeBaseOffset / 13;
       const threshold = trucoThreshold(

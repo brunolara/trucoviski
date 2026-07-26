@@ -13,8 +13,13 @@ import {
 } from "../packages/bots/src/index.js";
 import type { HeuristicV2Features } from "../packages/bots/src/index.js";
 
-/** v2 vs v1, arena espelhada, TEST_SEED+10k, N=40k. Reproduzir se algo mudar. */
-const V2_VS_V1_BASELINE = 0.5474;
+/** v2 vs v1, arena espelhada, seed-block test, N=40k (2026-07-26: 55.21%). */
+const V2_VS_V1_BASELINE = 0.5521;
+
+export interface EvaluateOptions {
+  /** Só arena vs v2 (iteração rápida). Default false = fitness completo. */
+  vsV2Only?: boolean;
+}
 
 export interface CandidateResult {
   features: HeuristicV2Features;
@@ -63,7 +68,10 @@ export function evaluate(
   features: HeuristicV2Features,
   games: number,
   seed: number,
+  opts: EvaluateOptions = {},
 ): CandidateResult {
+  const vsV2Only = opts.vsV2Only === true;
+
   const vsV2 = runArena({
     games,
     seed,
@@ -71,6 +79,20 @@ export function evaluate(
     policyTeam0: makeV3Policy(features, seed + 11),
     policyTeam1: makeV2Policy(seed + 12),
   });
+
+  if (vsV2Only) {
+    return {
+      features,
+      fitness: vsV2.winRateTeam0,
+      wrVsV2: vsV2.winRateTeam0,
+      wrVsV1: 0,
+      selfPlayBigRate: 0,
+      selfPlay12Rate: 0,
+      discarded: false,
+      games,
+    };
+  }
+
   const vsV1 = runArena({
     games,
     seed: seed + 10_000,
@@ -78,8 +100,20 @@ export function evaluate(
     policyTeam0: makeV3Policy(features, seed + 21),
     policyTeam1: makeV1Policy(),
   });
+  const tol = games >= 20_000 ? 0.005 : 0.02;
+  if (vsV1.winRateTeam0 < V2_VS_V1_BASELINE - tol && games < 20_000) {
+    return {
+      features,
+      fitness: -1,
+      wrVsV2: vsV2.winRateTeam0,
+      wrVsV1: vsV1.winRateTeam0,
+      selfPlayBigRate: 0,
+      selfPlay12Rate: 0,
+      discarded: true,
+      games,
+    };
+  }
 
-  // F5.5: self-play — produção é todos os assentos na mesma política
   const selfGames = Math.max(500, Math.floor(games / 4));
   const selfPlay = runArena({
     games: selfGames,
@@ -92,12 +126,10 @@ export function evaluate(
     selfPlay.diagnostics.closingHandValues,
   );
 
-  // F5.4: restrição dura — não regredir vs v1 em relação ao baseline do v2
-  const tol = games >= 20_000 ? 0.005 : 0.02;
   if (vsV1.winRateTeam0 < V2_VS_V1_BASELINE - tol) {
     return {
       features,
-      fitness: Number.NEGATIVE_INFINITY,
+      fitness: -1,
       wrVsV2: vsV2.winRateTeam0,
       wrVsV1: vsV1.winRateTeam0,
       selfPlayBigRate,
@@ -107,7 +139,6 @@ export function evaluate(
     };
   }
 
-  // Penalidade = metade do objetivo (self-play ≥9), não desempate
   const penalty = selfPlayBigRate * 0.15;
   const fitness = vsV2.winRateTeam0 - penalty;
   return {

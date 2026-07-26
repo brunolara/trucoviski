@@ -81,6 +81,7 @@ function baseView(overrides: Partial<PlayerView> = {}): PlayerView {
     trucoValue: 1,
     trucoPendingTeam: null,
     trucoPendingValue: null,
+    trucoRaises: [],
     isElevenHand: false,
     isFerro: false,
     elevenDecision: null,
