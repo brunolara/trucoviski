@@ -10,6 +10,14 @@ import type {
   MatchMetadata,
   PlayerView,
 } from "@trucoviski/engine";
+import { NICKNAME_MAX_LENGTH } from "./names.js";
+
+export {
+  NICKNAME_MAX_LENGTH,
+  PLAYER_NAMES,
+  pickRandomPlayerName,
+  pickUniquePlayerNames,
+} from "./names.js";
 
 // ---- Tipos do engine reexportados para conveniência ----------------- */
 
@@ -88,7 +96,7 @@ export type ServerMessage = SnapshotMessage | ActionRejectedMessage;
 // ---- Validação runtime de setNickname (Zod 4, strict) -----------------
 
 const setNicknamePayloadSchema = z.strictObject({
-  nickname: z.string().trim().min(1).max(16),
+  nickname: z.string().trim().min(1).max(NICKNAME_MAX_LENGTH),
 });
 
 /**

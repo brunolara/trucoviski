@@ -185,7 +185,12 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     const snap = await syncAndWait(owner);
     expect(snap.status).toBe("playing");
     const nicks = snap.nicknames!;
-    expect(nicks[3]?.startsWith("Bot")).toBe(true);
+    expect(nicks[3]).toBeDefined();
+    expect(nicks[3]).not.toBe("Dono");
+    expect(nicks[3]).not.toBe("P2");
+    expect(nicks[3]).not.toBe("P3");
+    // único assento restante é bot com nome do pool
+    expect(Object.values(nicks).filter((n) => n === nicks[3]).length).toBe(1);
   });
 
   it("F5: owner is transferred to the next human when the owner leaves the lobby", async () => {
@@ -226,11 +231,19 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
 
     expect(snap.nicknames).toBeDefined();
     const nicks = snap.nicknames!;
-    expect(Object.keys(nicks).length).toBeGreaterThanOrEqual(1);
-    const botNames = Object.entries(nicks).filter(([, name]) =>
-      name.startsWith("Bot"),
-    );
-    expect(botNames.length).toBeGreaterThan(0);
+    expect(Object.keys(nicks).length).toBe(4);
+    expect(nicks[snap.seat]).toBe("Humano");
+    const botNames = Object.entries(nicks)
+      .filter(([seat]) => Number(seat) !== snap.seat)
+      .map(([, name]) => name);
+    expect(botNames).toHaveLength(3);
+    // nomes do pool, distintos entre si e do humano
+    expect(new Set(botNames).size).toBe(3);
+    for (const name of botNames) {
+      expect(name).not.toBe("Humano");
+      expect(name).not.toMatch(/^Bot \d/);
+      expect(name.length).toBeGreaterThan(0);
+    }
   });
 
   it("setNickname updates nickname mid-lobby", async () => {
@@ -338,14 +351,14 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     expect(snap.nicknames?.[snap.seat]).toBe("Original");
   });
 
-  it("setNickname rejects string > 16 chars", async () => {
+  it("setNickname rejects string > 32 chars", async () => {
     const room = await gameServer.createRoom("truco", { seed: SEED });
     const player = await connectWithQueue(gameServer, room, {
       nickname: "Original",
     });
     await drainJoinMessages(player);
 
-    player.raw.send("setNickname", { nickname: "A".repeat(17) });
+    player.raw.send("setNickname", { nickname: "A".repeat(33) });
     await new Promise((r) => setTimeout(r, 200));
     drainAll(player);
 

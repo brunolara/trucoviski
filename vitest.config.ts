@@ -15,6 +15,10 @@ export default defineConfig({
         "./apps/server/src/index.ts",
         import.meta.url,
       ).pathname,
+      "@colyseus/sdk": new URL(
+        "./apps/web/node_modules/@colyseus/sdk",
+        import.meta.url,
+      ).pathname,
     },
   },
   test: {

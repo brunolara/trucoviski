@@ -10,13 +10,20 @@ import type {
   PlayerView,
   GameEvent,
   MatchMetadata,
+  Card,
+  Seat,
 } from "@trucoviski/shared";
+import { NICKNAME_MAX_LENGTH } from "@trucoviski/shared";
 import { sounds } from "./utils/sounds.js";
 
 // ---- Session persistence (F: sobreviver ao F5) -----------------------
 
 const SESSION_KEY = "trucoviski.session";
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || window.location.origin;
+const SERVER_URL =
+  import.meta.env.VITE_SERVER_URL ||
+  (import.meta.env.DEV
+    ? `${window.location.protocol}//${window.location.hostname}:2568`
+    : window.location.origin);
 
 interface SavedSession {
   reconnectionToken: string;
@@ -125,6 +132,13 @@ export interface StoreState {
 
   // Presentation banner (F: pacing)
   banner: { text: string; team?: 0 | 1 } | null;
+  /** Congela as cartas da vaza durante reveal → vaza → sweep. */
+  tableHold: {
+    plays: readonly (Card | null)[];
+    covered: readonly boolean[];
+    winner?: Seat | null;
+    sweeping?: boolean;
+  } | null;
 
   // Actions
   setNickname: (name: string) => void;
@@ -133,11 +147,13 @@ export interface StoreState {
   setReconnecting: (v: boolean) => void;
   setError: (msg: string | null) => void;
   createRoom: () => Promise<void>;
+  createBotGame: () => Promise<void>;
   joinRoom: () => Promise<void>;
   boot: () => Promise<void>;
   fillBots: () => void;
   dispatchAction: (action: Action) => void;
   handleSnapshot: (snap: SnapshotMessage) => void;
+  skipPresentation: () => void;
   goToHome: () => void;
   reset: () => void;
 
@@ -180,6 +196,7 @@ const initialState = {
   emotes: {},
   activeTomato: null,
   banner: null,
+  tableHold: null,
 };
 
 // ---- Snapshot presentation queue (F: pacing) -------------------------
@@ -187,13 +204,18 @@ const initialState = {
 
 const HOLD_MS: Partial<Record<GameEvent["type"], number>> = {
   cardPlayed: 600,
-  vazaCompleted: 1800,
   trucoRaised: 1500,
   trucoAccepted: 1500,
   trucoRan: 1500,
   surrendered: 1500,
   handFinished: 2000,
 };
+
+/** Beats de apresentação da vaza (cliente). */
+const REVEAL_MS = 600;
+const VAZA_MS = 1600;
+const SWEEP_MS = 300;
+const HAND_MS = 2200;
 
 const BANNER_PRIORITY: Partial<Record<GameEvent["type"], number>> = {
   trucoRaised: 1,
@@ -216,17 +238,27 @@ function seatTeam(seat: number): 0 | 1 {
   return seat === 0 || seat === 2 ? 0 : 1;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+let skipHold: (() => void) | null = null;
+
+function hold(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(t);
+      skipHold = null;
+      resolve();
+    };
+    const t = setTimeout(done, ms);
+    skipHold = done;
+  });
 }
 
 function holdForEvents(events: GameEvent[] | undefined): number {
   if (!events || events.length === 0) return 0;
-  let hold = 0;
+  let ms = 0;
   for (const e of events) {
-    hold = Math.max(hold, HOLD_MS[e.type] ?? 0);
+    ms = Math.max(ms, HOLD_MS[e.type] ?? 0);
   }
-  return hold;
+  return ms;
 }
 
 function bannerForEvents(
@@ -336,11 +368,10 @@ export const useStore = create<StoreState>()((set, get) => {
       banner: bannerForEvents(snap.events, nicknames),
     });
 
+    // `screen: "end"` é adiado para depois dos holds em drainQueue —
+    // senão a mesa some no mesmo frame do banner final.
     if (snap.status === "playing") {
       set({ screen: "mesa" });
-    } else if (snap.status === "finished") {
-      set({ screen: "end" });
-      clearSession();
     }
   }
 
@@ -350,10 +381,46 @@ export const useStore = create<StoreState>()((set, get) => {
     let snap: SnapshotMessage | undefined;
     while ((snap = snapshotQueue.shift())) {
       applySnapshot(snap);
-      const hold = holdForEvents(snap.events);
-      if (hold > 0) {
-        await sleep(hold);
-        set({ banner: null });
+
+      const vazaEvent = snap.events?.find((e) => e.type === "vazaCompleted");
+      const handEvent = snap.events?.find((e) => e.type === "handFinished");
+      const nicknames = get().nicknames;
+
+      if (vazaEvent && vazaEvent.type === "vazaCompleted") {
+        const { plays, covered, winner } = vazaEvent;
+        // reveal: 4 cartas sem destaque
+        set({ tableHold: { plays, covered }, banner: null });
+        await hold(REVEAL_MS);
+        // vaza: destaca vencedor + banner
+        set({
+          tableHold: { plays, covered, winner },
+          banner: bannerForEvents([vazaEvent], nicknames),
+        });
+        await hold(VAZA_MS);
+        // sweep: cartas deslizam para o vencedor
+        set({
+          tableHold: { plays, covered, winner, sweeping: true },
+        });
+        await hold(SWEEP_MS);
+        if (handEvent && handEvent.type === "handFinished") {
+          set({
+            tableHold: null,
+            banner: bannerForEvents([handEvent], nicknames),
+          });
+          await hold(HAND_MS);
+        }
+        set({ tableHold: null, banner: null });
+      } else {
+        const holdMs = holdForEvents(snap.events);
+        if (holdMs > 0) {
+          await hold(holdMs);
+          set({ banner: null });
+        }
+      }
+
+      if (snap.status === "finished") {
+        set({ screen: "end", tableHold: null, banner: null });
+        clearSession();
       }
     }
     processingQueue = false;
@@ -515,7 +582,7 @@ export const useStore = create<StoreState>()((set, get) => {
     ...initialState,
 
     setNickname(name) {
-      set({ nickname: name.slice(0, 16).trim() });
+      set({ nickname: name.slice(0, NICKNAME_MAX_LENGTH).trim() });
     },
 
     setRoomId(id) {
@@ -564,6 +631,13 @@ export const useStore = create<StoreState>()((set, get) => {
           error: "Erro ao criar sala: " + String(err),
           connecting: false,
         });
+      }
+    },
+
+    async createBotGame() {
+      await get().createRoom();
+      if (get().room) {
+        get().fillBots();
       }
     },
 
@@ -635,7 +709,13 @@ export const useStore = create<StoreState>()((set, get) => {
       void drainQueue();
     },
 
+    skipPresentation() {
+      skipHold?.();
+    },
+
     goToHome() {
+      skipHold?.();
+      skipHold = null;
       const { room } = get();
       if (room) {
         // Remove handlers antes do leave voluntário para não disparar onLeave.
@@ -655,6 +735,8 @@ export const useStore = create<StoreState>()((set, get) => {
     },
 
     reset() {
+      skipHold?.();
+      skipHold = null;
       const { room } = get();
       if (room) {
         (room.onLeave as { clear(): void }).clear();

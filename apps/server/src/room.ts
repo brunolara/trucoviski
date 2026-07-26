@@ -8,6 +8,8 @@ import { createMatch, paulista } from "@trucoviski/engine";
 import { PRNG_VERSION } from "@trucoviski/engine";
 import type { Seat, GameEvent } from "@trucoviski/engine";
 import {
+  NICKNAME_MAX_LENGTH,
+  pickUniquePlayerNames,
   validateAction,
   validateSetNickname,
   validateChat,
@@ -22,7 +24,7 @@ import { logger } from "./logger.js";
 
 const MAX_SEATS = 4;
 const BOT_DELAY_MS = 1000;
-const BOT_DELAY_AFTER_VAZA_OR_HAND_MS = 2000;
+const BOT_DELAY_AFTER_VAZA_OR_HAND_MS = 2600;
 
 function hasHoldEvent(events: readonly GameEvent[]): boolean {
   return events.some(
@@ -123,7 +125,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     // Registra nickname (F3).
     const nickname =
       typeof options?.nickname === "string" && options.nickname.trim()
-        ? options.nickname.trim().slice(0, 16)
+        ? options.nickname.trim().slice(0, NICKNAME_MAX_LENGTH)
         : `Jogador ${seat + 1}`;
     this.nicknames.set(seat, nickname);
 
@@ -295,14 +297,20 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     const seatsToFill = [...this.freeSeats];
     if (seatsToFill.length === 0) return;
 
-    for (const seat of seatsToFill) {
+    const taken = new Set(this.nicknames.values());
+    const botNames = pickUniquePlayerNames(seatsToFill.length, taken, (n) =>
+      randomInt(n),
+    );
+
+    seatsToFill.forEach((seat, i) => {
+      const name = botNames[i] ?? `Bot ${seat + 1}`;
       this.botSeats.add(seat);
-      this.nicknames.set(seat, `Bot ${seat + 1}`);
+      this.nicknames.set(seat, name);
 
       // Remove do freeSeats (marcando como ocupado).
       const idx = this.freeSeats.indexOf(seat);
       if (idx !== -1) this.freeSeats.splice(idx, 1);
-    }
+    });
 
     // Se todos os 4 seats estão ocupados (humanos + bots), inicia.
     if (this.occupied.size + this.botSeats.size === MAX_SEATS) {

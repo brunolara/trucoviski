@@ -46,6 +46,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
     proxy: {
       "/matchmake": {
         target: "http://localhost:2568",

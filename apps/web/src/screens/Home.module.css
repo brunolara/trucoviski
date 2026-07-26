@@ -22,12 +22,6 @@
   font-weight: 800;
   color: #f4d03f;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-  margin-bottom: 0.25rem;
-}
-
-.subtitle {
-  font-size: 0.9rem;
-  color: #a0b89e;
   margin-bottom: 1.5rem;
 }
 
@@ -39,8 +33,53 @@
   text-align: left;
 }
 
+.nameRow {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+  align-items: stretch;
+}
+
+.nameRow .input {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.generateBtn {
+  flex-shrink: 0;
+  width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.3);
+  color: #f4d03f;
+  outline: none;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.generateBtn:hover:not(:disabled) {
+  background: rgba(244, 208, 63, 0.12);
+  border-color: rgba(244, 208, 63, 0.4);
+}
+
+.generateBtn:focus-visible {
+  border-color: #f4d03f;
+  box-shadow: 0 0 0 2px rgba(244, 208, 63, 0.35);
+}
+
+.generateBtn:disabled {
+  opacity: 0.5;
+}
+
 .input {
   width: 100%;
+  min-height: 44px;
   padding: 0.7rem 0.9rem;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -52,8 +91,9 @@
   transition: border-color 0.2s;
 }
 
-.input:focus {
+.input:focus-visible {
   border-color: #f4d03f;
+  box-shadow: 0 0 0 2px rgba(244, 208, 63, 0.35);
 }
 
 .input::placeholder {
@@ -66,30 +106,38 @@
   gap: 0.6rem;
 }
 
-.primaryBtn {
+.primaryBtn,
+.secondaryBtn {
   width: 100%;
-  padding: 0.8rem;
+  min-height: 44px;
   border-radius: 10px;
+  font-weight: 700;
+  outline: none;
+  transition: background 0.2s;
+}
+
+.primaryBtn {
+  padding: 0.8rem;
   background: #c0392b;
   color: #fff;
-  font-weight: 700;
   font-size: 1.05rem;
-  transition: background 0.2s;
 }
 
 .primaryBtn:hover:not(:disabled) {
   background: #e74c3c;
 }
 
+.primaryBtn:focus-visible,
+.secondaryBtn:focus-visible {
+  box-shadow: 0 0 0 2px rgba(244, 208, 63, 0.55);
+}
+
 .secondaryBtn {
-  width: 100%;
   padding: 0.7rem;
-  border-radius: 10px;
   background: rgba(255, 255, 255, 0.1);
   color: #e8dcc8;
   font-weight: 600;
   font-size: 0.95rem;
-  transition: background 0.2s;
 }
 
 .secondaryBtn:hover:not(:disabled) {
@@ -100,9 +148,11 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0.2rem 0;
+  margin: 0.4rem 0 0.2rem;
   font-size: 0.8rem;
   color: #5a7a5a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .divider::before,

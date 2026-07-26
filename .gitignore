@@ -6,4 +6,6 @@ coverage/
 .DS_Store
 *:Zone.Identifier
 playwright-report/
+apps/web/dev-dist/
+mock-v2/
 test-results/
