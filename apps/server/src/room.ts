@@ -16,7 +16,7 @@ import {
   validateEmote,
   validateThrowTomato,
 } from "@trucoviski/shared";
-import type { SnapshotMessage, WireError } from "@trucoviski/shared";
+import type { LogEntry, SnapshotMessage, WireError } from "@trucoviski/shared";
 import { decideBotAction } from "@trucoviski/bots";
 import { logger } from "./logger.js";
 
@@ -25,6 +25,8 @@ import { logger } from "./logger.js";
 const MAX_SEATS = 4;
 const BOT_DELAY_MS = 1000;
 const BOT_DELAY_AFTER_VAZA_OR_HAND_MS = 2600;
+/** Partida de 12 tentos não passa de ~400 linhas; corta as antigas. */
+const MAX_LOG_ENTRIES = 600;
 
 /** 5 personas × 5 veredictos. Só tabela — a decisão vem do bot, não daqui. */
 const PERSONAS = [
@@ -157,12 +159,30 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
   /** Dedupe: um conselho por pedido de truco / mão de onze. */
   private lastAdviceKey: string | null = null;
 
+  /** Histórico da partida (console do cliente). */
+  private log: LogEntry[] = [];
+
   // -- Lifecycle -------------------------------------------------------
 
   override onCreate(options: Record<string, unknown>): void {
     const seed = validateSeed(options.seed);
     this.match = createMatch(paulista, seed);
     this.setState({ status: this.status });
+
+    // ponytail: a engine não emite handStarted da mão 1 (match.ts:74).
+    const st = this.match.state();
+    if (st.hand) {
+      this.log.push({
+        kind: "event",
+        t: Date.now(),
+        event: {
+          type: "handStarted",
+          handNumber: st.handNumber,
+          dealerSeat: st.dealerSeat,
+          vira: st.hand.vira,
+        },
+      });
+    }
 
     this.onMessage("*", (client, type, message) => {
       this.handleMessage(client, type, message);
@@ -432,7 +452,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     if (!parsed) return;
 
     this.lastChatTime.set(client.sessionId, now);
-    this.broadcast("chatMessage", { seat, text: parsed.text });
+    this.pushSocial({ kind: "chat", t: now, seat, text: parsed.text });
   }
 
   // -- handleEmote -------------------------------------------------------
@@ -451,7 +471,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     if (!parsed) return;
 
     this.lastEmoteTime.set(client.sessionId, now);
-    this.broadcast("emote", { seat, emoji: parsed.emoji });
+    this.pushSocial({ kind: "emote", t: now, seat, emoji: parsed.emoji });
   }
 
   // -- handleThrowTomato -------------------------------------------------
@@ -470,7 +490,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     if (!parsed) return;
 
     this.lastTomatoTime.set(client.sessionId, now);
-    this.broadcast("tomatoThrown", {
+    this.pushSocial({
+      kind: "tomato",
+      t: now,
       senderSeat: seat,
       targetSeat: parsed.targetSeat,
     });
@@ -701,13 +723,42 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
   // -- Broadcast -------------------------------------------------------
 
   private broadcastSnapshots(events: readonly GameEvent[]): void {
+    const t = Date.now();
+    for (const e of events) this.log.push({ kind: "event", t, event: e });
+    // ponytail: partida de 12 tentos não passa de ~400 linhas; corta as antigas.
+    if (this.log.length > MAX_LOG_ENTRIES) {
+      this.log.splice(0, this.log.length - MAX_LOG_ENTRIES);
+    }
+    // Conselho antes do envio: entra no mesmo snapshot (não só no próximo).
+    this.maybeAdvise();
     for (const c of this.clients) {
       const seat = this.occupied.get(c.sessionId);
       if (seat !== undefined) {
         this.sendSnapshot(c, seat, events);
       }
     }
-    this.maybeAdvise();
+  }
+
+  /**
+   * Registra no histórico e reenvia snapshots (o log vai neles).
+   * Cuidado: maybeAdvise chama pushSocial → broadcastSnapshots de novo;
+   * lastAdviceKey (setado antes do broadcast) corta a segunda passada.
+   */
+  private pushSocial(entry: LogEntry): void {
+    this.log.push(entry);
+    if (this.log.length > MAX_LOG_ENTRIES) {
+      this.log.splice(0, this.log.length - MAX_LOG_ENTRIES);
+    }
+    if (entry.kind === "chat")
+      this.broadcast("chatMessage", { seat: entry.seat, text: entry.text });
+    else if (entry.kind === "emote")
+      this.broadcast("emote", { seat: entry.seat, emoji: entry.emoji });
+    else if (entry.kind === "tomato")
+      this.broadcast("tomatoThrown", {
+        senderSeat: entry.senderSeat,
+        targetSeat: entry.targetSeat,
+      });
+    this.broadcastSnapshots([]);
   }
 
   /**
@@ -739,7 +790,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     this.lastAdviceKey = key;
 
     const text = botAdvice(this.match.playerView(botSeat as Seat));
-    if (text) this.broadcast("chatMessage", { seat: botSeat, text });
+    if (text) {
+      this.pushSocial({ kind: "chat", t: Date.now(), seat: botSeat, text });
+    }
   }
 
   private sendSnapshot(
@@ -767,6 +820,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
         prngVersion: PRNG_VERSION,
       },
       nicknames: nicknamesRecord,
+      // ponytail: manda o log inteiro em cada snapshot (~30KB no fim de uma
+      // partida longa). Se o tráfego incomodar, mandar só a cauda com índice.
+      log: [...this.log],
     };
 
     if (this.status === "playing" || this.status === "finished") {

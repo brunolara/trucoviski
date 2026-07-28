@@ -233,3 +233,49 @@ describe("store presentation — beats da vaza", () => {
     expect(useStore.getState().banner).toBeNull();
   });
 });
+
+describe("store — log do console", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useStore.getState().reset();
+    useStore.setState({ screen: "mesa", nickname: "Ana" });
+  });
+
+  afterEach(() => {
+    useStore.getState().reset();
+    vi.useRealTimers();
+  });
+
+  it("espelha log do servidor e não apaga quando snapshot omite log", () => {
+    const log1 = [
+      {
+        kind: "event" as const,
+        t: 1,
+        event: {
+          type: "handStarted" as const,
+          handNumber: 1,
+          dealerSeat: 0,
+          vira: { rank: "7" as const, suit: "paus" as const },
+        },
+      },
+    ];
+    const log2 = [
+      ...log1,
+      {
+        kind: "chat" as const,
+        t: 2,
+        seat: 0,
+        text: "oi",
+      },
+    ];
+
+    useStore.getState().handleSnapshot({ ...snapWith([]), log: log1 });
+    expect(useStore.getState().log).toEqual(log1);
+
+    useStore.getState().handleSnapshot({ ...snapWith([]), log: log2 });
+    expect(useStore.getState().log).toEqual(log2);
+
+    useStore.getState().handleSnapshot(snapWith([])); // sem log
+    expect(useStore.getState().log).toEqual(log2);
+  });
+});

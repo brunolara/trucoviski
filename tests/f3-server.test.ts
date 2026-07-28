@@ -588,7 +588,7 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
 
     // Registra métricas iniciais.
     const initialVazas = snap1.view?.completedVazas.length ?? 0;
-    const initialHand = snap1.view?.completedVazas.length === 0 ? 0 : 1;
+    const initialHandNumber = snap1.view?.handNumber ?? 1;
 
     // Loop: humano joga quando necessário, observa progressão.
     let progressed = false;
@@ -610,14 +610,14 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
       if (snap.status !== "playing" || !snap.view) continue;
 
       const currentVazas = snap.view.completedVazas.length;
-      const currentHand = currentVazas === 0 ? 0 : 1;
+      const currentHandNumber = snap.view.handNumber;
 
-      // Verifica se progrediu (mais vazas ou nova mão).
+      // Verifica se progrediu (mais vazas na mão corrente ou nova mão).
       if (currentVazas > initialVazas) {
         progressed = true;
         if (currentVazas >= 2) secondVazaObserved = true;
       }
-      if (currentHand > initialHand) {
+      if (currentHandNumber > initialHandNumber) {
         progressed = true;
         secondHandObserved = true;
       }

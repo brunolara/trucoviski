@@ -31,6 +31,17 @@ export type {
   Seat,
 } from "@trucoviski/engine";
 
+export { isManilha, paulista } from "@trucoviski/engine";
+
+// ---- Histórico da partida (console) ---------------------------------
+
+/** Uma entrada do histórico da partida. Ordem do array = ordem cronológica. */
+export type LogEntry =
+  | { kind: "event"; t: number; event: GameEvent }
+  | { kind: "chat"; t: number; seat: number; text: string }
+  | { kind: "emote"; t: number; seat: number; emoji: string }
+  | { kind: "tomato"; t: number; senderSeat: number; targetSeat: number };
+
 // ---- Mensagens cliente → servidor -----------------------------------
 
 export interface ClientActionMessage {
@@ -84,6 +95,8 @@ export interface SnapshotMessage {
   replayMetadata?: MatchMetadata;
   /** Nicknames por seat (F3). */
   nicknames?: Record<number, string>;
+  /** Histórico completo da partida (console). */
+  log?: LogEntry[];
 }
 
 export interface ActionRejectedMessage {

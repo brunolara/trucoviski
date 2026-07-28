@@ -200,4 +200,90 @@ describe("TrucoRoom (F4: Social & Rate Limits)", () => {
     };
     expect(msg.targetSeat).toBe(1);
   }, 12000);
+
+  it("snapshot traz handStarted da mão 1 e cardPlayed no log", async () => {
+    const room = await gameServer.createRoom("truco", { seed: 200 });
+    const human = await connectWithQueue(gameServer, room, {
+      nickname: "Humano",
+    });
+    await drainJoinMessages(human);
+
+    human.raw.send("fillBots", {});
+    let snap = (await waitForInQueue(human, "snapshot")) as {
+      status: string;
+      log?: { kind: string; event?: { type: string } }[];
+      view?: { legalActions: { type: string }[] };
+    };
+    // Pode chegar waiting (fill) antes de playing.
+    let tries = 0;
+    while (snap.status !== "playing" && tries < 50) {
+      snap = (await waitForInQueue(human, "snapshot")) as typeof snap;
+      tries++;
+    }
+    expect(snap.status).toBe("playing");
+    expect(
+      snap.log?.some(
+        (e) => e.kind === "event" && e.event?.type === "handStarted",
+      ),
+    ).toBe(true);
+
+    const playCard = snap.view?.legalActions.find((a) => a.type === "playCard");
+    if (!playCard) {
+      human.raw.send("sync", {});
+      snap = (await waitForInQueue(human, "snapshot")) as typeof snap;
+    }
+    const action =
+      snap.view?.legalActions.find((a) => a.type === "playCard") ??
+      snap.view?.legalActions.find((a) => a.type === "playHiddenCard");
+    expect(action).toBeDefined();
+    human.raw.send("action", { payload: action });
+
+    const after = (await waitForInQueue(human, "snapshot")) as {
+      log?: { kind: string; event?: { type: string } }[];
+    };
+    let found = after;
+    for (let i = 0; i < 20; i++) {
+      if (
+        found.log?.some(
+          (e) => e.kind === "event" && e.event?.type === "cardPlayed",
+        )
+      ) {
+        break;
+      }
+      found = (await waitForInQueue(human, "snapshot")) as typeof found;
+    }
+    expect(
+      found.log?.some(
+        (e) => e.kind === "event" && e.event?.type === "cardPlayed",
+      ),
+    ).toBe(true);
+    expect(
+      found.log?.some(
+        (e) => e.kind === "event" && e.event?.type === "handStarted",
+      ),
+    ).toBe(true);
+  }, 20000);
+
+  it("após chat, o snapshot traz entrada kind chat no log", async () => {
+    const room = await gameServer.createRoom("truco", { seed: 201 });
+    const c0 = await connectWithQueue(gameServer, room, { nickname: "P1" });
+    const c1 = await connectWithQueue(gameServer, room, { nickname: "P2" });
+    await drainJoinMessages(c0);
+    await drainJoinMessages(c1);
+    // Join do c1 rebroadcasta para c0 — limpa a fila antes do chat.
+    c0.messages.length = 0;
+    c1.messages.length = 0;
+
+    c0.raw.send("chat", { text: "no log" });
+    await waitForInQueue(c0, "chatMessage");
+
+    const snap = (await waitForInQueue(c0, "snapshot")) as {
+      log?: { kind: string; text?: string; seat?: number }[];
+    };
+    expect(
+      snap.log?.some(
+        (e) => e.kind === "chat" && e.text === "no log" && e.seat === 0,
+      ),
+    ).toBe(true);
+  }, 10000);
 });

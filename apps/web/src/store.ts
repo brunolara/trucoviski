@@ -12,6 +12,7 @@ import type {
   MatchMetadata,
   Card,
   Seat,
+  LogEntry,
 } from "@trucoviski/shared";
 import { NICKNAME_MAX_LENGTH } from "@trucoviski/shared";
 import { sounds } from "./utils/sounds.js";
@@ -115,6 +116,8 @@ export interface StoreState {
   };
   view: PlayerView | null;
   events: GameEvent[];
+  /** Histórico da partida (console). */
+  log: LogEntry[];
   replayMetadata: MatchMetadata | null;
   nicknames: Record<number, string>;
   roomOwnerSessionId: string;
@@ -186,6 +189,7 @@ const initialState = {
   metadata: { ...initialMeta },
   view: null,
   events: [],
+  log: [] as LogEntry[],
   replayMetadata: null,
   nicknames: {} as Record<number, string>,
   roomOwnerSessionId: "",
@@ -361,6 +365,8 @@ export const useStore = create<StoreState>()((set, get) => {
       metadata: snap.metadata,
       view: snap.view ?? null,
       events: snap.events ?? [],
+      // Mantém o que já tem se o snapshot não trouxer log.
+      log: snap.log ?? get().log,
       replayMetadata: snap.replayMetadata ?? null,
       nicknames,
       roomOwnerSessionId: snap.ownerSessionId,

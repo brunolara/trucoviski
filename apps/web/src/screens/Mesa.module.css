@@ -380,7 +380,6 @@
 
 .trucoAlert,
 .presentationBanner,
-.elevenBox,
 .vazasArea {
   z-index: 3;
   align-self: center;
@@ -444,16 +443,22 @@
   }
 }
 .elevenBox {
+  width: 100%;
   padding: 7px;
+  color: #f4d06a;
   border: 2px solid #7be89a;
+  border-radius: 4px;
   background: #1a1006;
+  font-family: "Press Start 2P", monospace;
+  font-size: 8px;
+  text-align: center;
 }
 .elevenText {
   margin-bottom: 5px;
 }
 .elevenBtns {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
@@ -541,11 +546,24 @@
   font-size: 6px;
 }
 
-.actionArea {
+.bottomBar {
   z-index: 3;
-  width: calc(100% - 36px);
-  align-self: center;
-  margin-top: 1px;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 0 12px calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.gameActions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+}
+.actionArea {
+  width: 100%;
 }
 .trucoActions {
   display: grid;
@@ -556,14 +574,15 @@
 .acceptBtn,
 .runBtn,
 .playBtn {
-  min-height: 42px;
+  width: 100%;
+  min-height: 52px;
   padding: 8px 5px;
   color: #ff3fa4;
   background: #1a1006;
   border: 2px solid currentcolor;
   border-radius: 5px;
   font-family: "Press Start 2P", monospace;
-  font-size: 8px;
+  font-size: 12px;
   text-shadow: 0 0 5px currentcolor;
   box-shadow:
     0 0 8px rgb(255 63 164 / 50%),
@@ -583,48 +602,30 @@
     inset 0 0 6px rgb(0 0 0 / 50%);
 }
 
-.socialToggle {
-  position: absolute;
-  z-index: 4;
-  right: 18px;
-  bottom: 13px;
-  padding: 5px;
-  color: #2de2e6;
-  background: #1a1006;
-  border: 1px solid #2de2e6;
-  border-radius: 3px;
-  font-family: "Press Start 2P", monospace;
-  font-size: 7px;
-}
 .footer {
-  z-index: 3;
   display: flex;
-  align-self: center;
-  gap: 10px;
-  margin: 4px 18px 10px;
-}
-.surrenderBtn,
-.leaveBtn {
+  justify-content: space-between;
+  gap: 6px;
   min-height: 44px;
-  padding: 8px 10px;
-  color: #d98a8a;
+}
+.utilBtn {
+  flex: 1;
+  min-height: 44px;
+  padding: 4px 2px;
+  color: rgb(244 232 200 / 55%);
   background: #1a1006;
-  border: 2px solid currentcolor;
+  border: 1px solid rgb(244 232 200 / 35%);
   border-radius: 4px;
   font-family: "Press Start 2P", monospace;
-  font-size: 10px;
+  font-size: 8px;
+  line-height: 1.35;
   white-space: nowrap;
 }
-.leaveBtn {
-  color: #caa23a;
-}
-.surrenderBtn:focus-visible,
-.leaveBtn:focus-visible {
+.utilBtn:focus-visible {
   outline: 2px solid #f4d06a;
   outline-offset: 2px;
 }
-.surrenderBtn:active,
-.leaveBtn:active {
+.utilBtn:active {
   transform: translateY(1px);
 }
 
@@ -646,6 +647,43 @@
   background: #20120a;
   border: 3px solid #caa23a;
   border-radius: 8px;
+}
+.logPanel {
+  composes: socialPanel;
+  display: flex;
+  max-height: 80%;
+  flex-direction: column;
+  overflow: hidden;
+}
+.logBody {
+  flex: 1;
+  margin-top: 10px;
+  overflow-y: auto;
+  font-family: "VT323", monospace;
+  font-size: 18px;
+  line-height: 1.35;
+}
+.logHand {
+  margin: 12px 0 6px;
+  color: #f4d06a;
+  font-family: "Press Start 2P", monospace;
+  font-size: 10px;
+  font-weight: normal;
+  line-height: 1.5;
+}
+.logHand:first-child {
+  margin-top: 0;
+}
+.logLine {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0;
+  color: #f4e8c8;
+}
+.logTime {
+  flex-shrink: 0;
+  color: #8a7a5a;
+  font-variant-numeric: tabular-nums;
 }
 .socialPanelHeader {
   display: flex;

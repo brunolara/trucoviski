@@ -7,3 +7,5 @@ playwright-report
 dev-dist
 .opencode
 mock-v2/
+.venv/
+data/

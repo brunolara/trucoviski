@@ -5,6 +5,7 @@ import type { Card } from "@trucoviski/shared";
 import { EMOJI_WHITELIST } from "@trucoviski/shared";
 import { motion, AnimatePresence } from "framer-motion";
 import { Carta } from "../components/mesa/Carta.js";
+import { cardIsManilha, logLines, seatName } from "../utils/historico.js";
 import styles from "./Mesa.module.css";
 
 /* ---- Helpers ------------------------------------------------------- */
@@ -16,23 +17,8 @@ const RANK_NAMES: Record<string, string> = {
   Q: "dama",
 };
 
-const PAULISTA_RANKS = ["4", "5", "6", "7", "Q", "J", "K", "A", "2", "3"];
-
-function isManilha(card: Card, vira: Card): boolean {
-  return (
-    card.rank ===
-    PAULISTA_RANKS[
-      (PAULISTA_RANKS.indexOf(vira.rank) + 1) % PAULISTA_RANKS.length
-    ]
-  );
-}
-
 function cardAriaLabel(card: Card): string {
   return `Jogar ${RANK_NAMES[card.rank] ?? card.rank} de ${card.suit}`;
-}
-
-function seatName(nicknames: Record<number, string>, s: number): string {
-  return nicknames[s] ?? `Jogador ${s + 1}`;
 }
 
 /** Time 0 = seats 0/2 (azul), time 1 = seats 1/3 (vermelho). */
@@ -94,10 +80,13 @@ export function Mesa() {
   const banner = useStore((s) => s.banner);
   const tableHold = useStore((s) => s.tableHold);
   const skipPresentation = useStore((s) => s.skipPresentation);
+  const log = useStore((s) => s.log);
 
   const [chatInput, setChatInput] = useState("");
   const [showSocialPanel, setShowSocialPanel] = useState(false);
+  const [showLog, setShowLog] = useState(false);
   const [desktopScale, setDesktopScale] = useState(1);
+  const logBodyRef = useRef<HTMLDivElement>(null);
   const lastCardTap = useRef<Record<number, number>>({});
   const playDispatchGuard = useRef({ snapshotKey: "", isDispatching: false });
 
@@ -111,6 +100,12 @@ export function Mesa() {
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
   }, []);
+
+  useEffect(() => {
+    if (!showLog) return;
+    const el = logBodyRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [showLog, log]);
 
   if (screen !== "mesa") return null;
   if (!view) {
@@ -406,7 +401,10 @@ export function Mesa() {
                                   }
                             }
                           >
-                            <Carta card={c} manilha={isManilha(c, view.vira)} />
+                            <Carta
+                              card={c}
+                              manilha={cardIsManilha(c, view.vira)}
+                            />
                           </motion.div>
                         ) : (
                           <div className={styles.playedCardEmpty}>
@@ -536,7 +534,10 @@ export function Mesa() {
                     <div className={styles.partnerCardsContainer}>
                       {view.partnerCards.map((pc, idx) => (
                         <div key={idx} className={styles.partnerMiniCard}>
-                          <Carta card={pc} manilha={isManilha(pc, view.vira)} />
+                          <Carta
+                            card={pc}
+                            manilha={cardIsManilha(pc, view.vira)}
+                          />
                         </div>
                       ))}
                     </div>
@@ -653,7 +654,7 @@ export function Mesa() {
                 <Carta
                   card={c ?? undefined}
                   covered={!c}
-                  manilha={c ? isManilha(c, view.vira) : false}
+                  manilha={c ? cardIsManilha(c, view.vira) : false}
                   key={si}
                   className={styles.miniCard}
                   aria-label={c ? `${c.rank} de ${c.suit}` : "Carta coberta"}
@@ -670,29 +671,6 @@ export function Mesa() {
               ? "Sua vez de jogar!"
               : `Vez de: ${seatName(nicknames, turnSeat)}`}
           </p>
-        )}
-
-        {/* Eleven decision buttons */}
-        {elevenDecisions.length > 0 && (
-          <div className={styles.elevenBox} data-testid="eleven-decision-box">
-            <p className={styles.elevenText}>Mão de Onze! Decida:</p>
-            <div className={styles.elevenBtns}>
-              {elevenDecisions.map((a) => (
-                <button
-                  key={a.decision}
-                  className={
-                    a.decision === "play" ? styles.playBtn : styles.runBtn
-                  }
-                  onClick={() => dispatchAction(a)}
-                  data-testid={
-                    a.decision === "play" ? "eleven-play-btn" : "eleven-run-btn"
-                  }
-                >
-                  {a.decision === "play" ? "Jogar (vale 3)" : "Correr (+1)"}
-                </button>
-              ))}
-            </div>
-          </div>
         )}
 
         {/* Hand Area (Your Cards) */}
@@ -774,7 +752,7 @@ export function Mesa() {
                   >
                     <Carta
                       card={c}
-                      manilha={isManilha(c, view.vira)}
+                      manilha={cardIsManilha(c, view.vira)}
                       className={styles.handCard}
                       data-testid={`hand-card-${i}`}
                       onDoubleClick={() => playVisibleCard(c)}
@@ -796,7 +774,7 @@ export function Mesa() {
                         )
                       }
                     />
-                    {isManilha(c, view.vira) && (
+                    {cardIsManilha(c, view.vira) && (
                       <span className={styles.manilhaBadge}>Manilha</span>
                     )}
                     {isMyTurn && (
@@ -821,80 +799,115 @@ export function Mesa() {
           </div>
         </div>
 
-        {/* Actions (Truco responses/proposals) */}
-        {isMyTurn && (
-          <div className={styles.actionArea} data-testid="action-area">
-            {/* Truco decisions */}
-            {legalTrucoActions.length > 0 && (
-              <div className={styles.trucoActions}>
-                {legalTrucoActions.map((a, i) => {
-                  const trucoAction = (a as { action: string }).action;
-                  let label: string = trucoAction;
-                  if (trucoAction === "raise") {
-                    const base = view.trucoPendingValue ?? view.trucoValue;
-                    const next = NEXT_TRUCO_VALUE[base];
-                    label = next
-                      ? (TRUCO_RAISE_LABEL[next] ?? "Truco!")
-                      : "Truco!";
-                  }
-                  if (trucoAction === "accept") {
-                    label = `Aceitar (vale ${view.trucoPendingValue})`;
-                  }
-                  if (trucoAction === "run") label = "Correr";
-                  return (
+        <div className={styles.bottomBar}>
+          <div className={styles.gameActions}>
+            {elevenDecisions.length > 0 && (
+              <div
+                className={styles.elevenBox}
+                data-testid="eleven-decision-box"
+              >
+                <p className={styles.elevenText}>Mão de Onze! Decida:</p>
+                <div className={styles.elevenBtns}>
+                  {elevenDecisions.map((a) => (
                     <button
-                      key={i}
+                      key={a.decision}
                       className={
-                        trucoAction === "raise"
-                          ? styles.trucoBtn
-                          : trucoAction === "accept"
-                            ? styles.acceptBtn
-                            : styles.runBtn
+                        a.decision === "play" ? styles.playBtn : styles.runBtn
                       }
                       onClick={() => dispatchAction(a)}
-                      data-testid={`truco-${trucoAction}-btn`}
+                      data-testid={
+                        a.decision === "play"
+                          ? "eleven-play-btn"
+                          : "eleven-run-btn"
+                      }
                     >
-                      {label}
+                      {a.decision === "play" ? "Jogar (vale 3)" : "Correr (+1)"}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
+              </div>
+            )}
+            {isMyTurn && (
+              <div className={styles.actionArea} data-testid="action-area">
+                {legalTrucoActions.length > 0 && (
+                  <div className={styles.trucoActions}>
+                    {legalTrucoActions.map((a, i) => {
+                      const trucoAction = (a as { action: string }).action;
+                      let label: string = trucoAction;
+                      if (trucoAction === "raise") {
+                        const base = view.trucoPendingValue ?? view.trucoValue;
+                        const next = NEXT_TRUCO_VALUE[base];
+                        label = next
+                          ? (TRUCO_RAISE_LABEL[next] ?? "Truco!")
+                          : "Truco!";
+                      }
+                      if (trucoAction === "accept") {
+                        label = `Aceitar (vale ${view.trucoPendingValue})`;
+                      }
+                      if (trucoAction === "run") label = "Correr";
+                      return (
+                        <button
+                          key={i}
+                          className={
+                            trucoAction === "raise"
+                              ? styles.trucoBtn
+                              : trucoAction === "accept"
+                                ? styles.acceptBtn
+                                : styles.runBtn
+                          }
+                          onClick={() => dispatchAction(a)}
+                          data-testid={`truco-${trucoAction}-btn`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
 
-        <button
-          type="button"
-          className={styles.socialToggle}
-          onClick={() => setShowSocialPanel(true)}
-          data-testid="social-toggle-btn"
-        >
-          💬 Social
-        </button>
-
-        {/* Footer */}
-        <div className={styles.footer}>
-          {canSurrender && (
+          <div className={styles.footer}>
             <button
-              className={styles.surrenderBtn}
-              data-testid="surrender-btn"
-              onClick={() => {
-                const surrenderAction = view.legalActions.find(
-                  (a) => a.type === "surrender",
-                );
-                if (!surrenderAction) return;
-                const confirmed = window.confirm(
-                  `Desistir da mão? O adversário ganha ${view.trucoValue} tento(s).`,
-                );
-                if (confirmed) dispatchAction(surrenderAction);
-              }}
+              type="button"
+              className={styles.utilBtn}
+              onClick={() => setShowLog(true)}
+              data-testid="log-toggle-btn"
             >
-              Desistir da mão
+              📜 Histórico
             </button>
-          )}
-          <button className={styles.leaveBtn} onClick={goToHome}>
-            Sair
-          </button>
+            <button
+              type="button"
+              className={styles.utilBtn}
+              onClick={() => setShowSocialPanel(true)}
+              data-testid="social-toggle-btn"
+            >
+              💬 Social
+            </button>
+            {canSurrender && (
+              <button
+                type="button"
+                className={styles.utilBtn}
+                data-testid="surrender-btn"
+                onClick={() => {
+                  const surrenderAction = view.legalActions.find(
+                    (a) => a.type === "surrender",
+                  );
+                  if (!surrenderAction) return;
+                  const confirmed = window.confirm(
+                    `Desistir da mão? O adversário ganha ${view.trucoValue} tento(s).`,
+                  );
+                  if (confirmed) dispatchAction(surrenderAction);
+                }}
+              >
+                🏳️ Desistir
+              </button>
+            )}
+            <button type="button" className={styles.utilBtn} onClick={goToHome}>
+              🚪 Sair
+            </button>
+          </div>
         </div>
 
         {showSocialPanel && (
@@ -965,6 +978,69 @@ export function Mesa() {
                   Enviar
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {showLog && (
+          <div
+            className={styles.socialOverlay}
+            role="presentation"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setShowLog(false);
+            }}
+          >
+            <div
+              className={styles.logPanel}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Histórico da partida"
+              tabIndex={-1}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setShowLog(false);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              data-testid="log-panel"
+            >
+              <div className={styles.socialPanelHeader}>
+                <strong>Histórico</strong>
+                <button
+                  type="button"
+                  className={styles.socialCloseBtn}
+                  onClick={() => setShowLog(false)}
+                  aria-label="Fechar histórico"
+                  data-testid="log-close-btn"
+                  autoFocus
+                >
+                  ×
+                </button>
+              </div>
+              <div className={styles.logBody} ref={logBodyRef}>
+                {logLines(log, nicknames).map((line, i) =>
+                  line.divider ? (
+                    <h3 key={i} className={styles.logHand}>
+                      {line.text}
+                    </h3>
+                  ) : (
+                    <div
+                      key={i}
+                      className={styles.logLine}
+                      style={
+                        line.team !== undefined
+                          ? { color: TEAM_COLORS[line.team] }
+                          : undefined
+                      }
+                    >
+                      <time className={styles.logTime} dateTime={line.time}>
+                        {line.time}
+                      </time>
+                      <span>{line.text}</span>
+                    </div>
+                  ),
+                )}
+              </div>
             </div>
           </div>
         )}
