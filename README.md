@@ -1,20 +1,41 @@
 # Truco Online 2D
 
-Monorepo do Truco Paulista online. **F1 + F2 slice 1 + F3 implementados.**
+Monorepo do Truco Paulista online. **F1–F5 concluídas; F6 (deploy e
+observabilidade) implementada para a VPS.**
 
 ## Requisitos
 
-- Node.js 22.23.1
-- pnpm 11
+- Node.js `>=22.13.0 <23`
+- pnpm `>=11 <12`
 - Docker com Compose (opcional, `pnpm validate:compose`)
 
-## Setup
+## Quick start local
+
+Pré-requisitos: Node.js `>=22.13.0 <23`, pnpm `>=11 <12` e Corepack. A execução
+local usa **dois terminais**: um para o servidor e outro para o frontend.
 
 ```sh
 corepack enable
 pnpm install
-pnpm gate
 ```
+
+No primeiro terminal, inicie o servidor:
+
+```sh
+cd apps/server && pnpm dev
+```
+
+No segundo, inicie o frontend:
+
+```sh
+cd apps/web && pnpm dev
+```
+
+Abra http://localhost:5173. O frontend de desenvolvimento conecta ao servidor em
+http://localhost:2568.
+
+Docker Compose é a topologia de deploy da VPS, não o fluxo local do jogo: ele
+exige as credenciais privadas do monitor e publica a porta apenas em loopback.
 
 ## Scripts
 
@@ -28,7 +49,52 @@ pnpm gate
 - `bash scripts/backup-sqlite.sh`: backup consistente do SQLite no volume da
   VPS; consulte `docs/f6-operations.md`.
 - `cd apps/web && pnpm dev`: frontend Vite em http://localhost:5173.
-- `cd apps/server && pnpm dev`: servidor Colyseus em ws://localhost:2568.
+- `cd apps/server && pnpm dev`: servidor Colyseus em http://localhost:2568.
+
+## Features do jogo
+
+- Truco Paulista para quatro jogadores, com salas que podem ser completadas por
+  bots; com dois humanos, eles ficam em times opostos.
+- Carta coberta a partir da segunda vaza: não vence a vaza nem revela a carta.
+  Também é possível desistir da mão quando não há pedido de truco pendente.
+- Ações de truco exibem o próximo valor aplicável; mão de onze e ferro têm
+  controles próprios.
+- Mesa com placar, times azul e vermelho, avatares e indicação de vez; a
+  apresentação pausa para mostrar o resultado das vazas e das mãos.
+- Cartas podem ser jogadas por duplo clique, duplo toque ou arrasto; a interface
+  inclui ajustes para mobile e PWA instalável.
+- Chat, emojis, tomates e histórico da partida ficam disponíveis na mesa.
+- Reconexão automática preserva a sessão da aba quando a sala ainda está ativa.
+
+## Deploy na VPS
+
+Leia e siga [deploy.md](deploy.md) antes do primeiro deploy: ele contém as
+pré-condições do Apache, confirmação humana antes de `sudo`, preservação do
+vhost e o procedimento para criar o `.env` privado. Não versione nem exiba esse
+arquivo; ele contém `MONITOR_USER` e `MONITOR_PASSWORD` e deve ter permissão
+`600`.
+
+Na atualização de uma VPS já configurada, verifique a proveniência do checkout
+conforme o procedimento operacional, faça o backup local e então valide, suba e
+execute o smoke:
+
+```sh
+bash scripts/backup-sqlite.sh
+pnpm validate:compose
+docker compose up --build --detach --wait --remove-orphans
+APP_URL=https://truco.brunodelara.dev bash scripts/smoke-deploy.sh
+```
+
+O único container `server` atende estáticos, HTTP e WebSocket em
+`127.0.0.1:2568`; Apache do host publica o domínio. Confirme que o smoke retorna
+`200` para a home e `/healthz`, e `403` para `/monitor` público. O monitor é
+acessível somente por túnel SSH e também exige Basic Auth. Não exponha a porta
+em `0.0.0.0`, não altere Cloudflare, DNS, TLS ou certificados, e não recrie
+`htpasswd`.
+
+Para o acesso interno ao monitor, validação autenticada, logs e rollback sem
+remover o volume SQLite, consulte [docs/f6-operations.md](docs/f6-operations.md)
+e [deploy.md](deploy.md). O backup externo ainda é uma pendência operacional.
 
 ## Estrutura
 
@@ -51,7 +117,11 @@ apps/web/            – Frontend React + Vite + Zustand + CSS Modules (F3)
 tests/               – Testes da engine + servidor
 scripts/sim.mts      – Script de simulação CLI
 docs/decisions.md    – Decisões de produto aprovadas (D1-D6)
-docs/f2.md           – F2 slice 1: escopo, aceite, decisões temporárias
+docs/f6-operations.md – Operação, monitor, backup e rollback do deploy
+docs/plano-bot-v3.md – Plano preservado do bot v3
+docs/plano-perf-arena.md – Plano preservado da arena de performance
+docs/plano-menu.md – Backlog F7 não implementado: modos de jogo
+docs/v3-sweep-result.json – Resultado do sweep do bot v3
 ```
 
 ## API pública da engine
@@ -76,9 +146,8 @@ Client → Server:
   { type: "setNickname", nickname }        // troca nickname no lobby
 
 Server → Client:
-  { type: "snapshot", seat, status, connectedPlayers, metadata, view?, events?, replayMetadata?, nicknames? }
+  { type: "snapshot", seat, status, connectedPlayers, ownerSessionId, metadata, view?, events?, replayMetadata?, nicknames? }
   { type: "actionRejected", error }        // erro wire ou ActionError
-  { type: "ownerInfo", sessionId }         // identifica o dono da sala
 ```
 
 A seed de replay não é exposta durante a partida; ela aparece somente em
@@ -97,6 +166,9 @@ apenas `PlayerView`/`legalActions`.
 
 ## Status
 
-**F1 concluída.** F2 slice 1 implementado (servidor Colyseus em memória). F3
-implementada: cliente web jogável (React + Vite + CSS Modules + Zustand), bots
-server-side, nicknames, fillWithBots.
+**F1–F5 concluídas.** A aplicação inclui engine, servidor autoritativo, cliente
+web jogável, bots server-side, recursos sociais, UX mobile/PWA e reconexão. **F6
+está implementada e autorizada:** Docker Compose executa um único `server` em
+loopback atrás do Apache do host, com healthcheck, monitor protegido, smoke
+pós-deploy e backup local do SQLite. Veja
+[docs/f6-operations.md](docs/f6-operations.md) para a operação.

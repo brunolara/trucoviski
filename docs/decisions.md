@@ -80,6 +80,8 @@ decisões silenciosas de regra.
 - Mistura de bots: `fillBots` normaliza assentos (humanos nos mais baixos, na
   ordem de entrada; bots no resto) — com 2 humanos, cada time fica com 1
   humano + 1 bot.
+- Mostrar carta: recurso removido. Não há `showCard`, `cardShown` nem
+  `MostrarCarta`; cartas continuam privadas conforme o `PlayerView`.
 
 ## Decisões F6 (deploy adaptado — implementadas)
 

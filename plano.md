@@ -76,7 +76,7 @@ truco/
 │   └── web/             # React
 │       ├── src/screens/         # Home, Lobby, Mesa, FimDePartida
 │       ├── src/components/mesa/ # Carta, MaoDoJogador, Vira, Placar, BotaoTruco
-│       ├── src/components/social/ # Chat inline, EmojiPicker, Tomate, MostrarCarta
+│       ├── src/components/social/ # Chat inline, EmojiPicker, Tomate (mostrar carta removido)
 │       └── src/themes/          # tokens CSS por tema (ver seção 9)
 ├── AGENTS.md            # regras p/ agentes OpenCode (seção 10)
 └── docker-compose.yml
@@ -120,21 +120,20 @@ implementação vira pergunta 🔶, não decisão silenciosa do agente.
 Toda ação é validada no servidor (é sua vez? carta é sua? aposta é legal?). Ação
 inválida = ignorada + log.
 
-| Mensagem       | Payload                       | Regras                                                                                                            |
-| -------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `playCard`     | `{ cardIndex, faceDown? }`    | Só na sua vez; carta coberta permitida da 2ª vaza em diante (paulista)                                            |
-| `callTruco`    | `{}`                          | Escala 3/6/9/12; valida alternância de time                                                                       |
-| `respondTruco` | `{ accept \| raise \| fold }` |                                                                                                                   |
-| `chat`         | `{ text }`                    | Máx 120 chars, rate-limit 1 msg/2s, sanitizado                                                                    |
-| `emote`        | `{ emoji }`                   | Whitelist de emojis; rate-limit 1/1.5s                                                                            |
-| `throwTomato`  | `{ targetSeat }`              | Cosmético; rate-limit 1/3s; broadcast p/ todos animarem                                                           |
-| `showCard`     | `{ cardIndex }`               | ⚠️ Servidor confirma que a carta É do jogador e faz broadcast do valor. Provocação legítima sem vazar mão inteira |
-| `fillWithBots` | `{}`                          | Só o dono da sala, só no lobby                                                                                    |
-| `toggleReady`  | `{}`                          |                                                                                                                   |
+| Mensagem       | Payload                       | Regras                                                                 |
+| -------------- | ----------------------------- | ---------------------------------------------------------------------- |
+| `playCard`     | `{ cardIndex, faceDown? }`    | Só na sua vez; carta coberta permitida da 2ª vaza em diante (paulista) |
+| `callTruco`    | `{}`                          | Escala 3/6/9/12; valida alternância de time                            |
+| `respondTruco` | `{ accept \| raise \| fold }` |                                                                        |
+| `chat`         | `{ text }`                    | Máx 120 chars, rate-limit 1 msg/2s, sanitizado                         |
+| `emote`        | `{ emoji }`                   | Whitelist de emojis; rate-limit 1/1.5s                                 |
+| `throwTomato`  | `{ targetSeat }`              | Cosmético; rate-limit 1/3s; broadcast p/ todos animarem                |
+| `fillWithBots` | `{}`                          | Só o dono da sala, só no lobby                                         |
+| `toggleReady`  | `{}`                          |                                                                        |
 
 **Servidor → clientes:** state sync automático (Colyseus Schema + StateView p/
-mãos privadas) + eventos efêmeros (`tomatoThrown`, `cardShown`, `chatMessage`,
-`trucoCalled`) via broadcast.
+mãos privadas) + eventos efêmeros (`tomatoThrown`, `chatMessage`, `trucoCalled`)
+via broadcast. O recurso de mostrar carta foi removido.
 
 **Anti-cheat (invariantes):**
 
@@ -192,12 +191,12 @@ humanas completam uma mão; funciona em viewport 390px (mobile).
 ### F4 — Social + juice 🍅 (concluída)
 
 Chat inline (balões sobre o avatar, some em 5s), emoji picker, tomate com
-animação de arremesso + splat + som, `showCard` (segurar na carta → "mostrar"),
-animações Framer Motion (distribuir, jogar, virar), sons (Howler), bot
+animação de arremesso + splat + som; o recurso de mostrar carta foi removido.
+Animações Framer Motion (distribuir, jogar, virar), sons (Howler), bot
 heurístico substituindo o random. **Gate G4:** Playwright cobre
-chat/emote/tomate/showCard; rate-limits testados no servidor; bot heurístico
-vence o random em ≥ 65% de 2.000 partidas simuladas (prova que a interface
-`BotStrategy` funciona).
+chat/emote/tomate; rate-limits testados no servidor; bot heurístico vence o
+random em ≥ 65% de 2.000 partidas simuladas (prova que a interface `BotStrategy`
+funciona).
 
 ### F5 — UX mobile + PWA (concluída)
 
