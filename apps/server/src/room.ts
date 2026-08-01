@@ -23,6 +23,7 @@ import { logger } from "./logger.js";
 // ---- Constantes ------------------------------------------------------
 
 const MAX_SEATS = 4;
+const RECONNECT_SECONDS = 180;
 const BOT_DELAY_MS = 1000;
 const BOT_DELAY_AFTER_VAZA_OR_HAND_MS = 2600;
 /** Partida de 12 tentos não passa de ~400 linhas; corta as antigas. */
@@ -247,6 +248,64 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       }
 
       this.broadcastSnapshots([]);
+      return;
+    }
+
+    if (this.status === "playing") {
+      const nickname = this.nicknames.get(seat) ?? `Jogador ${seat + 1}`;
+      // A ordem mantém occupied e botSeats mutuamente exclusivos.
+      this.occupied.delete(client.sessionId);
+      if (this.occupied.size === 0) {
+        if (this.closing) return;
+        this.closing = true;
+        this.clearBotTimer();
+        queueMicrotask(() => {
+          void this.disconnect().catch((error: unknown) => {
+            logger.error(error, "Failed to close TrucoRoom after player left");
+          });
+        });
+        return;
+      }
+      this.botSeats.add(seat);
+      this.pushSocial({
+        kind: "system",
+        t: Date.now(),
+        text: `${nickname} ${consented ? "saiu" : "caiu"} — bot assumiu.`,
+      });
+      this.scheduleBotTurn();
+
+      // Saída voluntária não reserva o assento para reconexão.
+      if (consented) return;
+
+      try {
+        const newClient = await this.allowReconnection(
+          client,
+          RECONNECT_SECONDS,
+        );
+        const newSessionId = newClient.sessionId;
+        this.botSeats.delete(seat);
+        this.occupied.set(newSessionId, seat);
+
+        if (newSessionId !== client.sessionId) {
+          if (this.ownerSessionId === client.sessionId) {
+            this.ownerSessionId = newSessionId;
+          }
+          const chatT = this.lastChatTime.get(client.sessionId);
+          if (chatT) this.lastChatTime.set(newSessionId, chatT);
+          const emoteT = this.lastEmoteTime.get(client.sessionId);
+          if (emoteT) this.lastEmoteTime.set(newSessionId, emoteT);
+          const tomatoT = this.lastTomatoTime.get(client.sessionId);
+          if (tomatoT) this.lastTomatoTime.set(newSessionId, tomatoT);
+        }
+
+        this.pushSocial({
+          kind: "system",
+          t: Date.now(),
+          text: `${nickname} voltou.`,
+        });
+      } catch {
+        // O bot permanece até o fim da partida.
+      }
       return;
     }
 
@@ -611,6 +670,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.botTimerId = null;
       this.botDispatching = false;
       if (this.closing || this.status !== "playing") return;
+      if (!this.botSeats.has(botSeat)) return;
       if (this.isTeamDecisionReservedForHuman(botSeat)) return;
 
       const botView = this.match.playerView(botSeat);

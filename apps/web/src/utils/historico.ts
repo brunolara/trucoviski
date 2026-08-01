@@ -91,6 +91,10 @@ export function logLines(
   for (const entry of log) {
     const time = formatTime(entry.t);
 
+    if (entry.kind === "system") {
+      lines.push({ hand, time, text: entry.text });
+      continue;
+    }
     if (entry.kind === "chat") {
       lines.push({
         hand,

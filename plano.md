@@ -218,6 +218,11 @@ monitor acessível; smoke test pós-deploy automatizado.
 
 ### F7 — Polimento contínuo (backlog)
 
+Substituição por bot na desconexão entregue: durante a partida, o bot assume o
+assento de humano desconectado e a reconexão involuntária retoma o mesmo assento
+em até 180 segundos; a sala fecha se não restar humano. **Aceite verificado:**
+`tests/f7-substituicao.test.ts` e `pnpm gate` verde.
+
 Tema de cartas #2, ranking simples, espectador, replays (a partir do seed + log
 de ações — já persistidos desde F2).
 

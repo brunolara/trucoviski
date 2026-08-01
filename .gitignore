@@ -9,3 +9,4 @@ playwright-report/
 apps/web/dev-dist/
 mock-v2/
 test-results/
+data/

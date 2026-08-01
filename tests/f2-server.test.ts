@@ -460,30 +460,26 @@ describe("TrucoRoom (F2 slice 1)", () => {
     expect([0, 1, 2, 3]).toContain(snap.seat);
   });
 
-  it("disconnect after start closes the room deterministically", async () => {
+  it("disconnect after start replaces the player with a bot", async () => {
     const allCc = await setup4Players(SEED);
     const victim = allCc[0]!;
     const other = allCc[1]!;
 
-    // Desconecta o primeiro jogador.
+    // Saída voluntária mantém a partida com o bot no assento.
     victim.raw.leave();
 
-    // Espera até o outro cliente ser desconectado (fail-closed).
-    const start = Date.now();
-    let wasDisconnected = false;
-    while (Date.now() - start < 5000) {
-      try {
-        if (!other.raw.connection.isOpen) {
-          wasDisconnected = true;
-          break;
-        }
-      } catch {
-        wasDisconnected = true;
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    expect(wasDisconnected).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const snap = await syncAndWait(other);
+    expect(other.raw.connection.isOpen).toBe(true);
+    expect(snap.status).toBe("playing");
+    expect(snap.connectedPlayers).toBe(4);
+
+    // A sala só fecha quando o último humano sai.
+    allCc[1]!.raw.leave();
+    allCc[2]!.raw.leave();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(allCc[3]!.raw.connection.isOpen).toBe(true);
+    allCc[3]!.raw.leave();
   });
 
   it("before game start, leaving frees the seat while another client remains", async () => {

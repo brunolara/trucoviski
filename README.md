@@ -64,7 +64,9 @@ exige as credenciais privadas do monitor e publica a porta apenas em loopback.
 - Cartas podem ser jogadas por duplo clique, duplo toque ou arrasto; a interface
   inclui ajustes para mobile e PWA instalável.
 - Chat, emojis, tomates e histórico da partida ficam disponíveis na mesa.
-- Reconexão automática preserva a sessão da aba quando a sala ainda está ativa.
+- Reconexão automática preserva a sessão da aba quando a sala ainda está ativa;
+  durante a partida, um bot assume o assento de quem desconectar e cede o lugar
+  se o jogador voltar em até 180 segundos.
 
 ## Deploy na VPS
 

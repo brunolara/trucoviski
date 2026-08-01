@@ -33,6 +33,20 @@ SQLite (não implementado na F1).
 
 Anónimo: nickname + token em localStorage (não implementado na F1).
 
+Nota: o código atual persiste a sessão em `sessionStorage`.
+
+## D7 – Substituição por bot na desconexão
+
+Durante a partida, se um humano desconectar e ainda restar humano na sala, um
+bot assume seu assento e a partida continua. Queda involuntária reserva o
+assento por 180 segundos; ao voltar nessa janela, o jogador retoma o mesmo
+assento e o bot deixa de jogar; depois dela, o bot fica até o fim da partida.
+Saída voluntária não reserva o assento, mas também é substituída por bot. Se não
+restar humano, a sala fecha como antes (fail-closed). O assento mantém o
+nickname original do jogador enquanto o bot joga. Fora de escopo: turn timer,
+tratamento de AFK, badge visual de bot e identidade persistente entre abas ou
+dispositivos.
+
 ## Desempates aprovados (implementados na F1)
 
 - Empate da primeira vaza (canga): a segunda vaza decide. Quem abre a segunda é

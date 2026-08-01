@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "types": ["node"],
+    "paths": {
+      "@trucoviski/engine": ["./packages/engine/src/index.ts"],
+      "@trucoviski/shared": ["./packages/shared/src/index.ts"],
+      "@trucoviski/server": ["./apps/server/src/index.ts"],
+      "@colyseus/sdk": ["./apps/web/node_modules/@colyseus/sdk"]
+    },
+    "baseUrl": "."
+  },
+  "include": ["tests/**/*.ts", "tests/e2e/**/*.ts", "vitest.config.ts"]
+}

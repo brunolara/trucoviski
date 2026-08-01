@@ -38,6 +38,7 @@ export { isManilha, paulista } from "@trucoviski/engine";
 /** Uma entrada do histórico da partida. Ordem do array = ordem cronológica. */
 export type LogEntry =
   | { kind: "event"; t: number; event: GameEvent }
+  | { kind: "system"; t: number; text: string }
   | { kind: "chat"; t: number; seat: number; text: string }
   | { kind: "emote"; t: number; seat: number; emoji: string }
   | { kind: "tomato"; t: number; senderSeat: number; targetSeat: number };
