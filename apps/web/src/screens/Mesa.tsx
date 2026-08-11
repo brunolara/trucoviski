@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../store.js";
-import type { Card } from "@trucoviski/shared";
+import type { Card, Seat } from "@trucoviski/shared";
 import { EMOJI_WHITELIST } from "@trucoviski/shared";
 import { motion, AnimatePresence } from "framer-motion";
 import { Carta } from "../components/mesa/Carta.js";
 import { cardIsManilha, logLines, seatName } from "../utils/historico.js";
+import { remainingCardsForSeat } from "../utils/mesa.js";
 import styles from "./Mesa.module.css";
 
 /* ---- Helpers ------------------------------------------------------- */
@@ -423,7 +424,8 @@ export function Mesa() {
 
           {/* Players Seats */}
           {relativeSeatsOrder.map((relSeat) => {
-            const absSeat = (seat + relSeat) % 4;
+            const absSeat = ((seat + relSeat) % 4) as Seat;
+            const remainingCards = remainingCardsForSeat(view, absSeat);
             const pos = SEAT_POSITIONS[relSeat]!;
             const isTurn =
               holdWinner !== undefined
@@ -455,7 +457,7 @@ export function Mesa() {
               >
                 {!isMe && !(relSeat === 2 && view.partnerCards?.length) && (
                   <div className={styles.seatCardBacks} aria-hidden="true">
-                    {Array.from({ length: 3 }, (_, index) => (
+                    {Array.from({ length: remainingCards }, (_, index) => (
                       <Carta covered key={index} />
                     ))}
                   </div>
