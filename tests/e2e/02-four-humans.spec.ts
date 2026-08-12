@@ -18,8 +18,8 @@ async function getScores(page: Page): Promise<[number, number] | null> {
 
     if (!score0Text || !score1Text) return null;
 
-    const score0 = parseInt(score0Text.replace("Nós: ", "").trim(), 10);
-    const score1 = parseInt(score1Text.replace("Eles: ", "").trim(), 10);
+    const score0 = parseInt(score0Text.match(/\d+/)?.[0] ?? "", 10);
+    const score1 = parseInt(score1Text.match(/\d+/)?.[0] ?? "", 10);
 
     if (isNaN(score0) || isNaN(score1)) return null;
     return [score0, score1];
@@ -102,7 +102,13 @@ test.describe("Partida com 4 humanos", () => {
         await pages[i].locator('[data-testid="join-room-btn"]').click();
       }
 
-      // Aguarda todos estarem na mesa (quarto jogador pode ir direto para mesa)
+      // Dono começa a partida
+      await expect(
+        pages[0].locator('[data-testid="player-count"]'),
+      ).toContainText("4 / 4", { timeout: 15000 });
+      await pages[0].locator('[data-testid="start-btn"]').click();
+
+      // Aguarda todos estarem na mesa
       for (const page of pages) {
         await expect(page.locator('[data-testid="mesa-screen"]')).toBeVisible({
           timeout: 30000,

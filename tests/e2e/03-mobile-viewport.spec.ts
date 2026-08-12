@@ -62,6 +62,7 @@ test.describe("Mobile viewport", () => {
 
     // Clica em preencher com bots
     await fillBotsButton.click();
+    await page.locator('[data-testid="start-btn"]').click();
 
     // Aguarda transição para mesa
     await expect(page.locator('[data-testid="lobby-screen"]')).toBeHidden({

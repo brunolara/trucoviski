@@ -209,10 +209,14 @@ describe("store menu — rede e fillBots", () => {
       "fillBots",
       expect.anything(),
     );
+    expect(mockRoomSend).not.toHaveBeenCalledWith(
+      "startGame",
+      expect.anything(),
+    );
     expect(useStore.getState().screen).toBe("lobby");
   });
 
-  it("createBotGame envia fillBots após criar sala", async () => {
+  it("createBotGame envia fillBots e startGame após criar sala", async () => {
     useStore.setState({ nickname: "BotMode" });
     mockCreate.mockResolvedValueOnce(buildMockRoom());
 
@@ -222,6 +226,7 @@ describe("store menu — rede e fillBots", () => {
       nickname: "BotMode",
     });
     expect(mockRoomSend).toHaveBeenCalledWith("fillBots", {});
+    expect(mockRoomSend).toHaveBeenCalledWith("startGame", {});
     expect(useStore.getState().screen).toBe("lobby");
   });
 });

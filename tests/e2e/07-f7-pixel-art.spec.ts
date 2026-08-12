@@ -36,6 +36,7 @@ async function joinMesa(page: Page) {
     timeout: 10000,
   });
   await page.locator('[data-testid="fill-bots-btn"]').click();
+  await page.locator('[data-testid="start-btn"]').click();
   await expect(page.locator('[data-testid="mesa-screen"]')).toBeVisible({
     timeout: 20000,
   });

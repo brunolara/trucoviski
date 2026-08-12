@@ -304,11 +304,14 @@ describe("F6 anti-cheat (snapshots do not leak other players cards)", () => {
     // Use a fresh room on the shared gameServer.
     const room = await gameServer.createRoom("truco", { seed: 1337 });
 
-    // Connect 4 clients to reach "playing" status.
+    // Connect 4 clients then startGame.
     const clients = [];
     for (let i = 0; i < 4; i++) {
       clients.push(await gameServer.connectTo(room));
     }
+    const owner = clients[0];
+    if (!owner) throw new Error("expected owner client");
+    owner.send("startGame", {});
 
     // Wait for all players to be synced and game to start.
     await new Promise((r) => setTimeout(r, 800));

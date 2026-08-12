@@ -42,6 +42,8 @@ const TRUCO_RAISE_LABEL: Record<number, string> = {
   12: "Pedir Doze!",
 };
 
+const TRUCO_BTN_ORDER: Record<string, number> = { raise: 0, run: 1, accept: 2 };
+
 const AVATARS = ["🤠", "👵", "🧔", "👩‍🌾"];
 
 const SEAT_POSITIONS = [
@@ -129,9 +131,17 @@ export function Mesa() {
     (a) => a.type === "playHiddenCard",
   );
   const legalTrucoActions = view.legalActions.filter((a) => a.type === "truco");
-  const elevenDecisions = view.legalActions.filter(
-    (a) => a.type === "elevenDecision",
+  // Aumentar / correr / aceitar, nessa ordem — a mais agressiva primeiro.
+  const sortedTrucoActions = [...legalTrucoActions].sort(
+    (a, b) =>
+      (TRUCO_BTN_ORDER[a.action] ?? 9) - (TRUCO_BTN_ORDER[b.action] ?? 9),
   );
+  const elevenDecisions = view.legalActions
+    .filter((a) => a.type === "elevenDecision")
+    .sort(
+      (a, b) =>
+        (a.decision === "run" ? -1 : 0) - (b.decision === "run" ? -1 : 0),
+    );
   const canSurrender = view.legalActions.some((a) => a.type === "surrender");
   // surrender é sempre legal na fase playing sem truco pendente — não conta como "sua vez".
   const isMyTurn =
@@ -227,6 +237,7 @@ export function Mesa() {
     tableHold?.sweeping && holdWinner != null
       ? SWEEP_DELTA[getRelativeSeat(holdWinner)]!
       : null;
+  const teamLabel = (team: 0 | 1) => (team === myTeam ? "Nós" : "Eles");
 
   return (
     <div className={styles.viewport}>
@@ -255,6 +266,7 @@ export function Mesa() {
                 className={styles.teamDot}
                 style={{ background: TEAM_COLORS[0] }}
               />
+              <span className={styles.scoreLabel}>{teamLabel(0)}</span>
               <span className={styles.scoreNumber}>{scores[0]}</span>
             </span>
             <span className={styles.divider}>×</span>
@@ -268,6 +280,7 @@ export function Mesa() {
                 style={{ background: TEAM_COLORS[1] }}
               />
               <span className={styles.scoreNumber}>{scores[1]}</span>
+              <span className={styles.scoreLabel}>{teamLabel(1)}</span>
             </span>
           </div>
           <div className={styles.viraTop} data-testid="round-info">
@@ -494,7 +507,16 @@ export function Mesa() {
                   </div>
 
                   {/* Player nickname */}
-                  <div className={styles.seatName}>
+                  <div
+                    className={`${styles.seatName} ${
+                      isMe || relSeat === 2 ? styles.seatNameTeam : ""
+                    }`}
+                    style={
+                      isMe || relSeat === 2
+                        ? { color: TEAM_COLORS[seatTeam(absSeat)] }
+                        : undefined
+                    }
+                  >
                     {name} {isMe && "(Você)"}
                   </div>
 
@@ -621,6 +643,34 @@ export function Mesa() {
             </div>
           )}
 
+          {/* Presentation banner (pacing) */}
+          <AnimatePresence>
+            {banner && (
+              <motion.div
+                className={styles.presentationBanner}
+                style={
+                  banner.team !== undefined
+                    ? {
+                        borderColor: TEAM_COLORS[banner.team],
+                        color: TEAM_COLORS[banner.team],
+                      }
+                    : {}
+                }
+                initial={{ opacity: 0, y: -10, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                data-testid="presentation-banner"
+              >
+                {banner.text}
+                {canSkipPresentation && (
+                  <span className={styles.skipHint} data-testid="skip-hint">
+                    toque para pular
+                  </span>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Ações da mão: sobrepostas à base da mesa */}
           <div className={styles.gameActions}>
             {elevenDecisions.length > 0 && (
@@ -652,7 +702,7 @@ export function Mesa() {
             {isMyTurn && legalTrucoActions.length > 0 && (
               <div className={styles.actionArea} data-testid="action-area">
                 <div className={styles.trucoActions}>
-                  {legalTrucoActions.map((a, i) => {
+                  {sortedTrucoActions.map((a, i) => {
                     const trucoAction = (a as { action: string }).action;
                     let label: string = trucoAction;
                     if (trucoAction === "raise") {
@@ -691,42 +741,24 @@ export function Mesa() {
 
         {/* Faixa de status: altura fixa para a mesa não mudar de tamanho */}
         <div className={styles.statusStrip}>
-          {turnSeat !== null && (
+          {/* Com truco pendente a vez não é de quem vai jogar carta: quem
+              responde é decidido pelo engine, então não mostramos um nome. */}
+          {view.trucoPendingTeam !== null ? (
             <p className={styles.turnIndicatorText}>
-              {turnSeat === seat
-                ? "▶ SUA VEZ DE JOGAR!"
-                : `Vez de: ${seatName(nicknames, turnSeat)}`}
+              {legalTrucoActions.length > 0
+                ? "▶ RESPONDA O TRUCO!"
+                : "Aguardando resposta ao truco..."}
             </p>
+          ) : (
+            turnSeat !== null && (
+              <p className={styles.turnIndicatorText}>
+                {turnSeat === seat
+                  ? "▶ SUA VEZ DE JOGAR!"
+                  : `Vez de: ${seatName(nicknames, turnSeat)}`}
+              </p>
+            )
           )}
         </div>
-
-        {/* Presentation banner (pacing) */}
-        <AnimatePresence>
-          {banner && (
-            <motion.div
-              className={styles.presentationBanner}
-              style={
-                banner.team !== undefined
-                  ? {
-                      borderColor: TEAM_COLORS[banner.team],
-                      color: TEAM_COLORS[banner.team],
-                    }
-                  : {}
-              }
-              initial={{ opacity: 0, y: -10, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              data-testid="presentation-banner"
-            >
-              {banner.text}
-              {canSkipPresentation && (
-                <span className={styles.skipHint} data-testid="skip-hint">
-                  toque para pular
-                </span>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Completed vazas */}
         <div className={styles.vazasArea}>

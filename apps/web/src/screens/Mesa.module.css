@@ -9,8 +9,6 @@
 }
 
 .screen {
-  --team-blue: #7be89a;
-  --team-red: #d98a8a;
   position: relative;
   width: 430px;
   height: 932px;
@@ -78,17 +76,12 @@
   line-height: 1;
 }
 
-.teamScore::before {
+.scoreLabel {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   color: currentcolor;
 }
-.teamScore:first-child::before {
-  content: "NÓS";
-}
-.teamScore:last-child::before {
-  content: "ELES";
-}
+
 .scoreNumber {
   font-size: 26px;
 }
@@ -177,8 +170,9 @@
 .tableDecorationGun {
   display: none;
 }
+/* acima do miolo da mesa (6), abaixo do banner (10) e das ações (9) */
 .seat {
-  z-index: 3;
+  z-index: 8;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -240,6 +234,11 @@
   font-family: "Press Start 2P", monospace;
   font-size: 6px;
   white-space: nowrap;
+}
+.seatNameTeam {
+  border-bottom: 2px solid currentColor;
+  text-shadow: 0 1px 0 currentColor;
+  padding-bottom: 1px;
 }
 .seat1 .seatName,
 .seat3 .seatName {
@@ -315,15 +314,23 @@
   z-index: 20;
   bottom: 40px;
   width: max-content;
-  max-width: 120px;
-  padding: 4px 7px;
+  max-width: 150px;
+  padding: 5px 8px;
   color: #20120a;
   background: #f4e8c8;
   border: 2px solid #caa23a;
   border-radius: 4px;
-  font-size: 16px;
+  box-shadow: 0 3px 0 rgb(0 0 0 / 45%);
+  font-size: 18px;
+  line-height: 1.15;
   text-align: center;
   word-break: break-word;
+}
+/* o assento do topo fala para baixo: acima dele ficam o banner e o alerta */
+.seat2 .chatBubble {
+  top: 100%;
+  bottom: auto;
+  margin-top: 6px;
 }
 .emoteBubble {
   position: absolute;
@@ -435,8 +442,8 @@
 .trucoAlert {
   position: absolute;
   top: 10px;
-  right: 12px;
-  left: 12px;
+  right: 10px;
+  left: 10px;
   z-index: 8;
   width: auto;
   font-size: 12px;
@@ -455,14 +462,25 @@
   border: 2px solid currentcolor;
   border-radius: 4px;
 }
+/* encaixam no topo da mesa: mesmo raio interno da moldura (40px - 10px) */
+.trucoAlert,
+.presentationBanner {
+  padding: 10px 14px;
+  border-radius: 30px 30px 8px 8px;
+}
 .presentationBanner {
   position: absolute;
-  top: 110px;
+  top: 10px;
+  right: 10px;
+  left: 10px;
   z-index: 10;
   display: flex;
   flex-direction: column;
   gap: 6px;
   align-items: center;
+  width: auto;
+  font-size: 12px;
+  line-height: 1.2;
 }
 .skipHint {
   color: rgb(244 224 180 / 70%);

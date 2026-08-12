@@ -49,6 +49,7 @@ test.describe("F5 - PWA e reconexão", () => {
         timeout: 10000,
       });
       await page.getByTestId("fill-bots-btn").click();
+      await page.getByTestId("start-btn").click();
 
       const mesaScreen = page.getByTestId("mesa-screen");
       await expect(mesaScreen).toBeVisible({ timeout: 15000 });

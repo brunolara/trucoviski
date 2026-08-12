@@ -58,6 +58,16 @@ export interface ClientFillBotsMessage {
   type: "fillBots";
 }
 
+export interface ClientStartGameMessage {
+  type: "startGame";
+}
+
+export interface ClientSwapSeatsMessage {
+  type: "swapSeats";
+  a: number;
+  b: number;
+}
+
 export interface ClientSetNicknameMessage {
   type: "setNickname";
   nickname: string;
@@ -67,6 +77,8 @@ export type ClientMessage =
   | ClientActionMessage
   | ClientSyncMessage
   | ClientFillBotsMessage
+  | ClientStartGameMessage
+  | ClientSwapSeatsMessage
   | ClientSetNicknameMessage;
 
 // ---- Erros wire ------------------------------------------------------
@@ -96,6 +108,8 @@ export interface SnapshotMessage {
   replayMetadata?: MatchMetadata;
   /** Nicknames por seat (F3). */
   nicknames?: Record<number, string>;
+  /** Assentos ocupados por bots (para o lobby distinguir humano/bot/vago). */
+  botSeats?: number[];
   /** Histórico completo da partida (console). */
   log?: LogEntry[];
 }
@@ -122,6 +136,25 @@ export function validateSetNickname(
 ): { nickname: string } | null {
   const result = setNicknamePayloadSchema.safeParse(payload);
   if (result.success) return result.data as { nickname: string };
+  return null;
+}
+
+// ---- Validação runtime de swapSeats (lobby) ---------------------------
+
+const swapSeatsPayloadSchema = z.strictObject({
+  a: z.number().int().min(0).max(3),
+  b: z.number().int().min(0).max(3),
+});
+
+/**
+ * Valida o payload de swapSeats contra o schema strict.
+ * Retorna `{ a, b }` ou null se inválido.
+ */
+export function validateSwapSeats(
+  payload: unknown,
+): { a: number; b: number } | null {
+  const result = swapSeatsPayloadSchema.safeParse(payload);
+  if (result.success) return result.data;
   return null;
 }
 

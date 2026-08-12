@@ -4,7 +4,7 @@
 
 import { Room, type Client } from "colyseus";
 import { randomInt } from "node:crypto";
-import { createMatch, paulista } from "@trucoviski/engine";
+import { createMatch, paulista, teamForSeat } from "@trucoviski/engine";
 import { PRNG_VERSION } from "@trucoviski/engine";
 import type { Seat, GameEvent, PlayerView } from "@trucoviski/engine";
 import {
@@ -12,6 +12,7 @@ import {
   pickUniquePlayerNames,
   validateAction,
   validateSetNickname,
+  validateSwapSeats,
   validateChat,
   validateEmote,
   validateThrowTomato,
@@ -79,11 +80,37 @@ const PERSONAS = [
 export function botAdvice(view: PlayerView): string | null {
   const persona = PERSONAS[view.mySeat % PERSONAS.length];
   if (!persona) return null;
-  const action = decideBotAction(view);
+  const action = decideBotAction(withTrucoResponse(view));
   if (action?.type === "truco") return persona[action.action] ?? null;
   if (action?.type === "elevenDecision")
     return action.decision === "play" ? persona.play : persona.fold;
   return null;
+}
+
+/**
+ * O engine só dá accept/run/raise ao assento que está sendo pedido. Para o
+ * parceiro bot opinar sobre um truco que o humano é quem responde, ele precisa
+ * receber a mesma pergunta na mão dele.
+ */
+function withTrucoResponse(view: PlayerView): PlayerView {
+  if (view.trucoPendingTeam === null) return view;
+  if (view.trucoPendingTeam === teamForSeat(view.mySeat)) return view;
+  if (view.legalActions.some((a) => a.type === "truco")) return view;
+
+  const seq = paulista.trucoSequence;
+  const canRaise =
+    view.trucoPendingValue !== null &&
+    seq.indexOf(view.trucoPendingValue) < seq.length - 1;
+
+  return {
+    ...view,
+    legalActions: [
+      ...view.legalActions,
+      { type: "truco", action: "accept" },
+      { type: "truco", action: "run" },
+      ...(canRaise ? [{ type: "truco", action: "raise" } as const] : []),
+    ],
+  };
 }
 
 function hasHoldEvent(events: readonly GameEvent[]): boolean {
@@ -134,6 +161,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
 
   /** Dono da sala (primeiro a entrar). */
   private ownerSessionId: string | null = null;
+
+  /** Dono rearranjou assentos no lobby — não renormalizar em fillBots. */
+  private seatsArranged = false;
 
   private match!: ReturnType<typeof createMatch>;
 
@@ -215,17 +245,8 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.ownerSessionId = client.sessionId;
     }
 
-    // Quarto ocupante (humano ou bot) → inicia partida, locka sala.
-    if (this.occupied.size + this.botSeats.size === MAX_SEATS) {
-      this.status = "playing";
-      this.setState({ status: this.status });
-      this.broadcastSnapshots([]);
-      void this.lock();
-      this.scheduleBotTurn();
-    } else {
-      // Ainda no lobby: notifica todos os presentes (novo jogador entrou).
-      this.broadcastSnapshots([]);
-    }
+    // Lobby: notifica todos os presentes (início é manual via startGame).
+    this.broadcastSnapshots([]);
   }
 
   override async onLeave(client: Client, code?: number): Promise<void> {
@@ -391,6 +412,16 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       return;
     }
 
+    if (type === "startGame") {
+      if (client.sessionId === this.ownerSessionId) this.startGame();
+      return;
+    }
+
+    if (type === "swapSeats") {
+      this.handleSwapSeats(client, message);
+      return;
+    }
+
     if (type === "setNickname") {
       this.handleSetNickname(client, message);
       return;
@@ -419,7 +450,17 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     // Mensagem desconhecida – ignora.
   }
 
-  // -- fillBots ---------------------------------------------------------
+  // -- startGame / fillBots / swapSeats ---------------------------------
+
+  private startGame(): void {
+    if (this.status !== "waiting") return;
+    if (this.occupied.size + this.botSeats.size !== MAX_SEATS) return;
+    this.status = "playing";
+    this.setState({ status: this.status });
+    this.broadcastSnapshots([]);
+    void this.lock();
+    this.scheduleBotTurn();
+  }
 
   private handleFillBots(client: Client): void {
     // Só o dono pode preencher.
@@ -431,7 +472,8 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     // Normaliza assentos: humanos (na ordem em que entraram) ocupam os
     // assentos mais baixos (0..N-1); bots preenchem o resto. Com 2 humanos
     // isso garante 1 humano por time (times são 0/2 vs 1/3).
-    this.normalizeHumanSeats();
+    // Se o dono já rearranjou, preserva o arranjo.
+    if (!this.seatsArranged) this.normalizeHumanSeats();
 
     const seatsToFill = [...this.freeSeats];
     if (seatsToFill.length === 0) return;
@@ -451,15 +493,60 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       if (idx !== -1) this.freeSeats.splice(idx, 1);
     });
 
-    // Se todos os 4 seats estão ocupados (humanos + bots), inicia.
-    if (this.occupied.size + this.botSeats.size === MAX_SEATS) {
-      this.status = "playing";
-      this.setState({ status: this.status });
-      this.broadcastSnapshots([]);
-      void this.lock();
-      this.scheduleBotTurn();
-    } else {
-      this.broadcastSnapshots([]);
+    this.broadcastSnapshots([]);
+  }
+
+  private handleSwapSeats(client: Client, message: unknown): void {
+    if (client.sessionId !== this.ownerSessionId) return;
+    if (this.status !== "waiting") return;
+    const p = validateSwapSeats(message);
+    if (!p || p.a === p.b) return;
+    this.swapSeat(p.a, p.b);
+    this.seatsArranged = true;
+    this.broadcastSnapshots([]);
+  }
+
+  /** Troca a ocupação de dois assentos nas quatro estruturas indexadas. */
+  private swapSeat(a: number, b: number): void {
+    let sessionA: string | undefined;
+    let sessionB: string | undefined;
+    for (const [sessionId, seat] of this.occupied) {
+      if (seat === a) sessionA = sessionId;
+      if (seat === b) sessionB = sessionId;
+    }
+    if (sessionA !== undefined) this.occupied.set(sessionA, b);
+    if (sessionB !== undefined) this.occupied.set(sessionB, a);
+
+    const aIsBot = this.botSeats.has(a);
+    const bIsBot = this.botSeats.has(b);
+    if (aIsBot !== bIsBot) {
+      if (aIsBot) {
+        this.botSeats.delete(a);
+        this.botSeats.add(b);
+      } else {
+        this.botSeats.delete(b);
+        this.botSeats.add(a);
+      }
+    }
+
+    const nickA = this.nicknames.get(a);
+    const nickB = this.nicknames.get(b);
+    if (nickB !== undefined) this.nicknames.set(a, nickB);
+    else this.nicknames.delete(a);
+    if (nickA !== undefined) this.nicknames.set(b, nickA);
+    else this.nicknames.delete(b);
+
+    const aFree = this.freeSeats.includes(a);
+    const bFree = this.freeSeats.includes(b);
+    if (aFree !== bFree) {
+      if (aFree) {
+        this.freeSeats = this.freeSeats.filter((s) => s !== a);
+        this.freeSeats.push(b);
+      } else {
+        this.freeSeats = this.freeSeats.filter((s) => s !== b);
+        this.freeSeats.push(a);
+      }
+      this.freeSeats.sort((x, y) => x - y);
     }
   }
 
@@ -643,12 +730,12 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       return;
     }
 
-    // Caso 2: truco pendente → time oposto responde, prefere humano.
+    // Caso 2: truco pendente → só um seat responde (o engine escolhe qual),
+    // então não há preferência humana a aplicar: se o responder é bot, ele age.
     if (hand.trucoPendingTeam !== null) {
-      const respondingTeam: 0 | 1 = hand.trucoPendingTeam === 0 ? 1 : 0;
-      if (this.hasHumanOnTeam(respondingTeam)) return;
-      const botSeat = this.firstBotOnTeam(respondingTeam);
-      if (botSeat !== null) this.dispatchBotAction(botSeat as Seat, delayMs);
+      const responder = this.trucoResponderSeat();
+      if (responder === null || !this.botSeats.has(responder)) return;
+      this.dispatchBotAction(responder as Seat, delayMs);
       return;
     }
 
@@ -721,18 +808,26 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     return false;
   }
 
-  /** Uma decisão de equipe pendente não pode ser tomada pelo bot se há aliado humano. */
+  /**
+   * Só a mão de onze é decisão de time (os dois seats recebem a ação legal) e
+   * portanto fica reservada ao humano. A resposta ao truco tem um único
+   * responder definido pelo engine — reservá-la travaria a mão quando o
+   * responder é bot e o parceiro é humano.
+   */
   private isTeamDecisionReservedForHuman(botSeat: Seat): boolean {
     const state = this.match.state();
-    if (state.phase === "elevenDecision") {
-      const team: 0 | 1 = state.scores[0] === 11 ? 0 : 1;
-      return this.seatTeam(botSeat) === team && this.hasHumanOnTeam(team);
-    }
-
-    const pendingTeam = state.hand?.trucoPendingTeam;
-    if (pendingTeam === null || pendingTeam === undefined) return false;
-    const team: 0 | 1 = pendingTeam === 0 ? 1 : 0;
+    if (state.phase !== "elevenDecision") return false;
+    const team: 0 | 1 = state.scores[0] === 11 ? 0 : 1;
     return this.seatTeam(botSeat) === team && this.hasHumanOnTeam(team);
+  }
+
+  /** Seat que o engine designou para responder ao truco pendente. */
+  private trucoResponderSeat(): number | null {
+    for (let s = 0; s < MAX_SEATS; s++) {
+      const v = this.match.playerView(s as Seat);
+      if (v.legalActions.some((a) => a.type === "truco")) return s;
+    }
+    return null;
   }
 
   private seatTeam(seat: Seat): 0 | 1 {
@@ -846,6 +941,12 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     if (!this.hasHumanOnTeam(team)) return;
     const botSeat = this.firstBotOnTeam(team);
     if (botSeat === null) return;
+    // Se quem responde é o próprio bot, ele age — conselho seria ruído.
+    if (
+      st.hand.trucoPendingTeam !== null &&
+      this.trucoResponderSeat() === botSeat
+    )
+      return;
     if (this.lastAdviceKey === key) return;
     this.lastAdviceKey = key;
 
@@ -880,6 +981,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
         prngVersion: PRNG_VERSION,
       },
       nicknames: nicknamesRecord,
+      botSeats: [...this.botSeats],
       // ponytail: manda o log inteiro em cada snapshot (~30KB no fim de uma
       // partida longa). Se o tráfego incomodar, mandar só a cauda com índice.
       log: [...this.log],
