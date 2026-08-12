@@ -12,6 +12,7 @@
   border-radius: var(--card-radius, 5px);
   font-family: "VT323", monospace;
   line-height: 0.85;
+  user-select: none;
 }
 
 .corner,

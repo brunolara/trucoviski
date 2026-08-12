@@ -1,6 +1,7 @@
 # Plano — acelerar a arena/sweep (medido, sem trocar de linguagem)
 
-Status: implementado (Fix 1 + Fix 2). Fix 3 (successive halving) não feito — opcional.
+Status: implementado (Fix 1 + Fix 2). Fix 3 (successive halving) não feito —
+opcional.
 
 ## Por que não reescrever em Rust/Go
 

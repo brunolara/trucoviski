@@ -295,10 +295,15 @@ describe("F5: desistir da mão (surrender)", () => {
 
   it("surrender with truco accepted at value 6 awards 6", () => {
     const match = createMatch(paulista, 42);
-    match.dispatch(1, { type: "truco", action: "raise" });
-    match.dispatch(2, { type: "truco", action: "accept" });
+    // Pedido de truco exige estar na vez: seat 0 abre, joga, e a vez passa ao 1.
     match.dispatch(0, { type: "truco", action: "raise" });
     match.dispatch(1, { type: "truco", action: "accept" });
+    match.dispatch(
+      0,
+      match.playerView(0).legalActions.find((a) => a.type === "playCard")!,
+    );
+    match.dispatch(1, { type: "truco", action: "raise" });
+    match.dispatch(2, { type: "truco", action: "accept" });
     expect(match.state().hand?.trucoValue).toBe(6);
 
     const r = match.dispatch(2, { type: "surrender" });
@@ -311,8 +316,8 @@ describe("F5: desistir da mão (surrender)", () => {
 
   it("surrender is rejected while a truco raise is pending", () => {
     const match = createMatch(paulista, 42);
-    match.dispatch(1, { type: "truco", action: "raise" });
-    const r = match.dispatch(0, { type: "surrender" });
+    match.dispatch(0, { type: "truco", action: "raise" });
+    const r = match.dispatch(1, { type: "surrender" });
     expect(r).toEqual({ success: false, error: "invalidPhase" });
   });
 

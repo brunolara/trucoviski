@@ -126,7 +126,11 @@ function evaluateAll(
             return;
           }
           if (msg.type !== "result" || msg.id == null || msg.result == null) {
-            fail(new Error(`worker sent unexpected message: ${JSON.stringify(msg)}`));
+            fail(
+              new Error(
+                `worker sent unexpected message: ${JSON.stringify(msg)}`,
+              ),
+            );
             return;
           }
           results[msg.id] = msg.result;

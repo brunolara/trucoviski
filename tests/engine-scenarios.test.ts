@@ -664,7 +664,14 @@ describe("truco alternation", () => {
     expect(rFail.success).toBe(false);
     expect(rFail.error).toBe("cannotRaiseYourOwnTruco");
 
-    // Team 1 can raise to 6
+    // Team 1 só pode aumentar quando chegar a sua vez
+    expect(match.dispatch(1, { type: "truco", action: "raise" }).error).toBe(
+      "notYourTurn",
+    );
+    match.dispatch(
+      0,
+      match.playerView(0).legalActions.find((a) => a.type === "playCard")!,
+    );
     const rOk = match.dispatch(1, { type: "truco", action: "raise" });
     expect(rOk.success).toBe(true);
   });
