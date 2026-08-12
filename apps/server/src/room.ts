@@ -2,13 +2,14 @@
 /*  TrucoRoom – sala Colyseus para 4 jogadores (F3: bots + nicknames)  */
 /* ------------------------------------------------------------------ */
 
-import { Room, type Client } from "colyseus";
+import { Room, matchMaker, type Client } from "colyseus";
 import { randomInt } from "node:crypto";
 import { createMatch, paulista, teamForSeat } from "@trucoviski/engine";
 import { PRNG_VERSION } from "@trucoviski/engine";
 import type { Seat, GameEvent, PlayerView } from "@trucoviski/engine";
 import {
   NICKNAME_MAX_LENGTH,
+  generateRoomCode,
   pickUniquePlayerNames,
   validateAction,
   validateSetNickname,
@@ -25,8 +26,21 @@ import { logger } from "./logger.js";
 
 const MAX_SEATS = 4;
 const RECONNECT_SECONDS = 180;
+/** Sala vazia (nenhum humano conectado) sobrevive esse tempo. D-sala-1. */
+const EMPTY_ROOM_TTL_MS = 5 * 60_000;
 const BOT_DELAY_MS = 1000;
 const BOT_DELAY_AFTER_VAZA_OR_HAND_MS = 2600;
+
+/** Identidade do navegador; sem ela, cai no sessionId (identidade da conexão). */
+function readClientId(
+  client: Client,
+  options?: Record<string, unknown>,
+): string {
+  const raw = options?.["clientId"];
+  return typeof raw === "string" && raw.trim().length >= 8
+    ? raw.trim().slice(0, 64)
+    : client.sessionId;
+}
 /** Partida de 12 tentos não passa de ~400 linhas; corta as antigas. */
 const MAX_LOG_ENTRIES = 600;
 
@@ -159,8 +173,15 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
   /** Seats ocupados por bots. */
   private botSeats = new Set<number>();
 
-  /** Dono da sala (primeiro a entrar). */
-  private ownerSessionId: string | null = null;
+  /** Dono de verdade: clientId de quem criou a sala. Nunca é sobrescrito. */
+  private ownerClientId: string | null = null;
+
+  /** clientId → assento guardado (para retomar depois do F5 / rejoin). */
+  // ponytail: cresce com visitantes distintos; se um dia importar, podar no dispose
+  private seatByClient = new Map<string, number>();
+
+  /** sessionId → clientId (userData pode não estar no cliente do onMessage). */
+  private clientIds = new Map<string, string>();
 
   /** Dono rearranjou assentos no lobby — não renormalizar em fillBots. */
   private seatsArranged = false;
@@ -177,6 +198,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
 
   /** Timer ID do próximo dispatch de bot (para limpeza no dispose). */
   private botTimerId: ReturnType<typeof setTimeout> | null = null;
+
+  /** Timer do descarte por inatividade. */
+  private emptyTimerId: ReturnType<typeof setTimeout> | null = null;
 
   /** sessionId → timestamp da última mensagem de chat. */
   private lastChatTime = new Map<string, number>();
@@ -196,6 +220,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
   // -- Lifecycle -------------------------------------------------------
 
   override onCreate(options: Record<string, unknown>): void {
+    this.roomId = this.pickRoomCode();
     const seed = validateSeed(options.seed);
     this.match = createMatch(paulista, seed);
     this.setState({ status: this.status });
@@ -215,6 +240,11 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       });
     }
 
+    // ponytail: sem autoDispose a sala só morre pelo nosso TTL — toda saída
+    // precisa passar por armEmptyTimerIfEmpty(), senão vaza sala pra sempre.
+    this.autoDispose = false;
+    this.armEmptyTimer();
+
     this.onMessage("*", (client, type, message) => {
       this.handleMessage(client, type, message);
     });
@@ -222,30 +252,72 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
 
   override onDispose(): void {
     this.clearBotTimer();
+    this.clearEmptyTimer();
   }
 
   override onJoin(client: Client, options?: Record<string, unknown>): void {
-    const seat = this.freeSeats.shift();
+    this.clearEmptyTimer();
+
+    const clientId = readClientId(client, options);
+    client.userData = { clientId };
+    this.clientIds.set(client.sessionId, clientId);
+    const remembered = this.seatByClient.get(clientId);
+
+    // Partida em curso: só volta quem tem assento guardado que está com bot.
+    if (this.status !== "waiting") {
+      if (remembered === undefined || !this.botSeats.has(remembered)) {
+        client.leave();
+        this.armEmptyTimerIfEmpty();
+        return;
+      }
+      this.botSeats.delete(remembered);
+      this.occupied.set(client.sessionId, remembered);
+      const nickname =
+        this.nicknames.get(remembered) ?? `Jogador ${remembered + 1}`;
+      this.pushSocial({
+        kind: "system",
+        t: Date.now(),
+        text: `${nickname} voltou.`,
+      });
+      this.scheduleBotTurn();
+      return; // pushSocial já faz broadcast
+    }
+
+    // Lobby: prefere o assento guardado, se ainda estiver livre ou com bot.
+    if (remembered !== undefined && this.botSeats.has(remembered)) {
+      this.botSeats.delete(remembered);
+      this.occupied.set(client.sessionId, remembered);
+      this.seatByClient.set(clientId, remembered);
+      const nickname =
+        typeof options?.nickname === "string" && options.nickname.trim()
+          ? options.nickname.trim().slice(0, NICKNAME_MAX_LENGTH)
+          : (this.nicknames.get(remembered) ?? `Jogador ${remembered + 1}`);
+      this.nicknames.set(remembered, nickname);
+      if (!this.ownerClientId) this.ownerClientId = clientId;
+      this.broadcastSnapshots([]);
+      return;
+    }
+
+    const seat =
+      remembered !== undefined && this.freeSeats.includes(remembered)
+        ? remembered
+        : this.freeSeats[0];
     if (seat === undefined) {
       client.leave();
       return;
     }
-
+    this.freeSeats = this.freeSeats.filter((s) => s !== seat);
     this.occupied.set(client.sessionId, seat);
+    this.seatByClient.set(clientId, seat);
 
-    // Registra nickname (F3).
     const nickname =
       typeof options?.nickname === "string" && options.nickname.trim()
         ? options.nickname.trim().slice(0, NICKNAME_MAX_LENGTH)
         : `Jogador ${seat + 1}`;
     this.nicknames.set(seat, nickname);
 
-    // Dono da sala (primeiro a entrar).
-    if (!this.ownerSessionId) {
-      this.ownerSessionId = client.sessionId;
-    }
+    if (!this.ownerClientId) this.ownerClientId = clientId;
 
-    // Lobby: notifica todos os presentes (início é manual via startGame).
     this.broadcastSnapshots([]);
   }
 
@@ -258,45 +330,33 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     if (this.status === "waiting") {
       this.occupied.delete(client.sessionId);
       this.nicknames.delete(seat);
-      // Libera assento para próximo jogador.
       this.freeSeats.push(seat);
       this.freeSeats.sort((a, b) => a - b);
-
-      // Se o dono saiu, promove o humano mais antigo restante.
-      if (this.ownerSessionId === client.sessionId) {
-        const [nextOwner] = this.occupied.keys();
-        this.ownerSessionId = nextOwner ?? null;
-      }
-
       this.broadcastSnapshots([]);
+      this.armEmptyTimerIfEmpty();
       return;
     }
 
     if (this.status === "playing") {
       const nickname = this.nicknames.get(seat) ?? `Jogador ${seat + 1}`;
-      // A ordem mantém occupied e botSeats mutuamente exclusivos.
       this.occupied.delete(client.sessionId);
-      if (this.occupied.size === 0) {
-        if (this.closing) return;
-        this.closing = true;
-        this.clearBotTimer();
-        queueMicrotask(() => {
-          void this.disconnect().catch((error: unknown) => {
-            logger.error(error, "Failed to close TrucoRoom after player left");
-          });
-        });
-        return;
-      }
       this.botSeats.add(seat);
       this.pushSocial({
         kind: "system",
         t: Date.now(),
         text: `${nickname} ${consented ? "saiu" : "caiu"} — bot assumiu.`,
       });
-      this.scheduleBotTurn();
+      if (this.occupied.size === 0) {
+        this.pauseBots();
+        this.armEmptyTimer();
+      } else {
+        this.scheduleBotTurn();
+      }
 
-      // Saída voluntária não reserva o assento para reconexão.
-      if (consented) return;
+      if (consented) {
+        this.armEmptyTimerIfEmpty();
+        return;
+      }
 
       try {
         const newClient = await this.allowReconnection(
@@ -306,11 +366,12 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
         const newSessionId = newClient.sessionId;
         this.botSeats.delete(seat);
         this.occupied.set(newSessionId, seat);
+        this.clientIds.set(
+          newSessionId,
+          this.clientIds.get(client.sessionId) ?? this.clientIdOf(newClient),
+        );
 
         if (newSessionId !== client.sessionId) {
-          if (this.ownerSessionId === client.sessionId) {
-            this.ownerSessionId = newSessionId;
-          }
           const chatT = this.lastChatTime.get(client.sessionId);
           if (chatT) this.lastChatTime.set(newSessionId, chatT);
           const emoteT = this.lastEmoteTime.get(client.sessionId);
@@ -319,75 +380,22 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
           if (tomatoT) this.lastTomatoTime.set(newSessionId, tomatoT);
         }
 
+        this.clearEmptyTimer();
+        this.scheduleBotTurn();
         this.pushSocial({
           kind: "system",
           t: Date.now(),
           text: `${nickname} voltou.`,
         });
       } catch {
-        // O bot permanece até o fim da partida.
+        this.armEmptyTimerIfEmpty();
       }
       return;
     }
 
-    // Se o cliente saiu voluntariamente, finaliza a sala imediatamente.
-    if (consented) {
-      this.occupied.delete(client.sessionId);
-      this.nicknames.delete(seat);
-
-      if (this.closing) return;
-      this.closing = true;
-      this.clearBotTimer();
-      queueMicrotask(() => {
-        void this.disconnect().catch((error: unknown) => {
-          logger.error(error, "Failed to close TrucoRoom after player left");
-        });
-      });
-      return;
-    }
-
-    // Queda involuntária: aguarda reconexão por até 15 segundos
-    try {
-      const newClient = await this.allowReconnection(client, 15);
-
-      const newSessionId = newClient.sessionId;
-      // Atualiza os mapeamentos caso o sessionId tenha mudado
-      if (newSessionId !== client.sessionId) {
-        this.occupied.delete(client.sessionId);
-        this.occupied.set(newSessionId, seat);
-
-        if (this.ownerSessionId === client.sessionId) {
-          this.ownerSessionId = newSessionId;
-        }
-
-        const chatT = this.lastChatTime.get(client.sessionId);
-        if (chatT) this.lastChatTime.set(newSessionId, chatT);
-
-        const emoteT = this.lastEmoteTime.get(client.sessionId);
-        if (emoteT) this.lastEmoteTime.set(newSessionId, emoteT);
-
-        const tomatoT = this.lastTomatoTime.get(client.sessionId);
-        if (tomatoT) this.lastTomatoTime.set(newSessionId, tomatoT);
-      }
-
-      this.sendSnapshot(newClient, seat, []);
-    } catch {
-      // Cliente não reconectou a tempo: fail-closed
-      this.occupied.delete(client.sessionId);
-      this.nicknames.delete(seat);
-
-      if (this.closing) return;
-      this.closing = true;
-      this.clearBotTimer();
-      queueMicrotask(() => {
-        void this.disconnect().catch((error: unknown) => {
-          logger.error(
-            error,
-            "Failed to close TrucoRoom after reconnect timeout",
-          );
-        });
-      });
-    }
+    this.occupied.delete(client.sessionId);
+    this.broadcastSnapshots([]);
+    this.armEmptyTimerIfEmpty();
   }
 
   // -- Handlers de mensagem --------------------------------------------
@@ -413,7 +421,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     }
 
     if (type === "startGame") {
-      if (client.sessionId === this.ownerSessionId) this.startGame();
+      if (this.isOwnerClient(client)) this.startGame();
       return;
     }
 
@@ -458,13 +466,12 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     this.status = "playing";
     this.setState({ status: this.status });
     this.broadcastSnapshots([]);
-    void this.lock();
     this.scheduleBotTurn();
   }
 
   private handleFillBots(client: Client): void {
     // Só o dono pode preencher.
-    if (client.sessionId !== this.ownerSessionId) return;
+    if (!this.isOwnerClient(client)) return;
 
     // Só no lobby (waiting).
     if (this.status !== "waiting") return;
@@ -488,16 +495,17 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.botSeats.add(seat);
       this.nicknames.set(seat, name);
 
-      // Remove do freeSeats (marcando como ocupado).
       const idx = this.freeSeats.indexOf(seat);
       if (idx !== -1) this.freeSeats.splice(idx, 1);
     });
 
+    // ponytail: não apaga seatByClient — D-sala-5: quem saiu do lobby retoma
+    // o assento se ele estiver com bot (dono que deu F5 incluso).
     this.broadcastSnapshots([]);
   }
 
   private handleSwapSeats(client: Client, message: unknown): void {
-    if (client.sessionId !== this.ownerSessionId) return;
+    if (!this.isOwnerClient(client)) return;
     if (this.status !== "waiting") return;
     const p = validateSwapSeats(message);
     if (!p || p.a === p.b) return;
@@ -548,24 +556,50 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       }
       this.freeSeats.sort((x, y) => x - y);
     }
+
+    for (const [clientId, seat] of [...this.seatByClient]) {
+      if (seat === a) this.seatByClient.set(clientId, b);
+      else if (seat === b) this.seatByClient.set(clientId, a);
+    }
   }
 
-  /** Reatribui humanos aos assentos 0..N-1 (na ordem em que entraram). */
+  /** Reatribui humanos aos assentos mais baixos livres, sem roubar reserva de ausente. */
   private normalizeHumanSeats(): void {
-    const humanEntries = [...this.occupied.entries()];
+    const connectedCids = new Set<string>();
+    for (const sessionId of this.occupied.keys()) {
+      const cid = this.clientIds.get(sessionId);
+      if (cid) connectedCids.add(cid);
+    }
+    const reserved = new Set<number>();
+    for (const [cid, seat] of this.seatByClient) {
+      if (!connectedCids.has(cid)) reserved.add(seat);
+    }
 
+    const available: number[] = [];
+    for (let s = 0; s < MAX_SEATS; s++) {
+      if (!reserved.has(s)) available.push(s);
+    }
+
+    const humanEntries = [...this.occupied.entries()];
     const newOccupied = new Map<string, number>();
     const newNicknames = new Map<number, string>();
     humanEntries.forEach(([sessionId, oldSeat], i) => {
-      newOccupied.set(sessionId, i);
-      newNicknames.set(i, this.nicknames.get(oldSeat) ?? `Jogador ${i + 1}`);
+      const seat = available[i] ?? i;
+      newOccupied.set(sessionId, seat);
+      newNicknames.set(
+        seat,
+        this.nicknames.get(oldSeat) ?? `Jogador ${seat + 1}`,
+      );
+      const cid = this.clientIds.get(sessionId);
+      if (cid) this.seatByClient.set(cid, seat);
     });
 
     this.occupied = newOccupied;
     this.nicknames = newNicknames;
     this.freeSeats = [];
-    for (let s = humanEntries.length; s < MAX_SEATS; s++) {
-      this.freeSeats.push(s);
+    const taken = new Set(newOccupied.values());
+    for (let s = 0; s < MAX_SEATS; s++) {
+      if (!taken.has(s)) this.freeSeats.push(s);
     }
   }
 
@@ -716,6 +750,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     if (this.botDispatching) return;
     if (this.status !== "playing") return;
     if (this.closing) return;
+    if (this.occupied.size === 0) return; // D-sala-2: sem humano, partida congela
 
     const st = this.match.state();
     const hand = st.hand;
@@ -757,6 +792,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.botTimerId = null;
       this.botDispatching = false;
       if (this.closing || this.status !== "playing") return;
+      if (this.occupied.size === 0) return;
       if (!this.botSeats.has(botSeat)) return;
       if (this.isTeamDecisionReservedForHuman(botSeat)) return;
 
@@ -794,6 +830,73 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       clearTimeout(this.botTimerId);
       this.botTimerId = null;
     }
+  }
+
+  /** Cancela o dispatch pendente E libera o latch — esquecer o latch trava o bot. */
+  private pauseBots(): void {
+    this.clearBotTimer();
+    this.botDispatching = false;
+  }
+
+  /** Arma o descarte. `ms` só é passado nos testes. */
+  private armEmptyTimer(ms: number = EMPTY_ROOM_TTL_MS): void {
+    this.clearEmptyTimer();
+    this.emptyTimerId = setTimeout(() => {
+      this.emptyTimerId = null;
+      if (this.closing) return;
+      if (this.occupied.size > 0) return;
+      this.closing = true;
+      this.clearBotTimer();
+      void this.disconnect().catch((error: unknown) => {
+        logger.error(error, "Failed to close idle TrucoRoom");
+      });
+    }, ms);
+  }
+
+  private clearEmptyTimer(): void {
+    if (this.emptyTimerId !== null) {
+      clearTimeout(this.emptyTimerId);
+      this.emptyTimerId = null;
+    }
+  }
+
+  /** Chamar no fim de TODA saída: sem humano conectado, começa a contagem. */
+  private armEmptyTimerIfEmpty(): void {
+    if (this.occupied.size === 0) this.armEmptyTimer();
+  }
+
+  /** Slug legível e livre; cai no id do Colyseus se as 10 tentativas colidirem. */
+  private pickRoomCode(): string {
+    for (let i = 0; i < 10; i++) {
+      const code = generateRoomCode((n: number) => randomInt(n));
+      if (!matchMaker.getLocalRoomById(code)) return code;
+    }
+    return this.roomId;
+  }
+
+  private clientIdOf(client: Client): string {
+    return (
+      this.clientIds.get(client.sessionId) ??
+      (client.userData as { clientId?: string } | undefined)?.clientId ??
+      client.sessionId
+    );
+  }
+
+  /** Dono efetivo: o criador se estiver conectado; senão, o humano mais antigo. */
+  private effectiveOwnerClientId(): string | null {
+    const connected: string[] = [];
+    for (const sessionId of this.occupied.keys()) {
+      connected.push(this.clientIds.get(sessionId) ?? sessionId);
+    }
+    if (this.ownerClientId && connected.includes(this.ownerClientId)) {
+      return this.ownerClientId;
+    }
+    return connected[0] ?? null;
+  }
+
+  private isOwnerClient(client: Client): boolean {
+    const owner = this.effectiveOwnerClientId();
+    return owner !== null && this.clientIdOf(client) === owner;
   }
 
   /** Existe pelo menos um humano conectado no time? */
@@ -974,7 +1077,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       seat,
       status: this.status,
       connectedPlayers,
-      ownerSessionId: this.ownerSessionId ?? "",
+      isOwner: this.isOwnerClient(client),
       metadata: {
         rulesetName: m.metadata.rulesetName,
         rulesetVersion: m.metadata.rulesetVersion,

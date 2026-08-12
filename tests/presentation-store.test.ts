@@ -98,7 +98,7 @@ function snapWith(
     seat: 0,
     status,
     connectedPlayers: 4,
-    ownerSessionId: "owner",
+    isOwner: true,
     metadata: {
       rulesetName: "paulista",
       rulesetVersion: "1.0.0",

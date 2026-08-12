@@ -1,4 +1,5 @@
 import { useState, type DragEvent } from "react";
+import { formatRoomCode } from "@trucoviski/shared";
 import { useStore } from "../store.js";
 import styles from "./Lobby.module.css";
 
@@ -93,7 +94,8 @@ export function Lobby() {
 
         <div className={styles.info}>
           <p>
-            Código: <strong data-testid="room-code">{roomId}</strong>
+            Código:{" "}
+            <strong data-testid="room-code">{formatRoomCode(roomId)}</strong>
           </p>
           <p data-testid="player-count">Jogadores: {connectedPlayers} / 4</p>
         </div>

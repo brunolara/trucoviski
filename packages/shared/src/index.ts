@@ -19,6 +19,12 @@ export {
   pickUniquePlayerNames,
 } from "./names.js";
 
+export {
+  generateRoomCode,
+  formatRoomCode,
+  normalizeRoomCode,
+} from "./room-code.js";
+
 // ---- Tipos do engine reexportados para conveniência ----------------- */
 
 export type {
@@ -93,8 +99,8 @@ export interface SnapshotMessage {
   seat: number;
   status: "waiting" | "playing" | "finished";
   connectedPlayers: number;
-  /** sessionId do dono da sala (quem pode preencher com bots). */
-  ownerSessionId: string;
+  /** true se ESTE cliente é o dono (ou dono interino) da sala. */
+  isOwner: boolean;
   /** Metadados públicos (sem seed) expostos em qualquer status. */
   metadata: {
     rulesetName: string;
