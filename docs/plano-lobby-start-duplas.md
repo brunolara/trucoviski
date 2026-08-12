@@ -1,4 +1,8 @@
-# Plano — Lobby: início manual, escolha de duplas e times visíveis
+# Registro — Lobby: início manual, escolha de duplas e times visíveis
+
+Status: **implementado**. Este documento preserva o roteiro do slice. O dono
+preenche vagas, organiza os assentos e inicia a partida; o comportamento atual
+está resumido no [README](../README.md).
 
 Escopo: 3 mudanças acopladas no lobby (server + web). Nada de engine. A engine
 já trata assento como índice puro (times fixos: **0/2 = time 0 azul**, **1/3 =

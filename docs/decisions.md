@@ -91,11 +91,22 @@ decisões silenciosas de regra.
   `ownerSessionId` em todo `SnapshotMessage`. Corrigido também um problema
   correlato: `onJoin` só notificava os presentes quando a sala enchia, deixando
   o lobby do dono desatualizado com 2-3 jogadores.
-- Mistura de bots: `fillBots` normaliza assentos (humanos nos mais baixos, na
-  ordem de entrada; bots no resto) — com 2 humanos, cada time fica com 1
-  humano + 1 bot.
+- Mistura de bots: antes de qualquer rearranjo manual, `fillBots` normaliza
+  assentos (humanos nos mais baixos, na ordem de entrada; bots no resto) — com 2
+  humanos, cada time fica com 1 humano + 1 bot. Depois que o dono rearranja
+  assentos no lobby, `fillBots` preserva esse arranjo.
 - Mostrar carta: recurso removido. Não há `showCard`, `cardShown` nem
   `MostrarCarta`; cartas continuam privadas conforme o `PlayerView`.
+
+## Decisões do lobby (implementadas)
+
+- O início da partida é manual: apenas o dono pode enviar `startGame`, e só
+  quando os quatro assentos estiverem ocupados por humanos ou bots.
+- No lobby, somente o dono pode trocar dois assentos. Os times são fixos por
+  assento: 0/2 formam o time azul e 1/3 o vermelho. Trocar um assento vazio é
+  permitido; trocar assentos durante a partida não é.
+- O modo "Jogar contra bots" preenche os três assentos livres e inicia a partida
+  sem exigir um clique no lobby.
 
 ## Decisões F6 (deploy adaptado — implementadas)
 

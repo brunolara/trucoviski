@@ -1,7 +1,8 @@
-# Plano — Tela de menu com modos de jogo
+# Registro — Tela de menu com modos de jogo
 
-Status: proposta. Fora de F0–F6. Tratar como novo slice de backlog (F7). Requer
-autorização explícita do humano antes de implementar.
+Status: **implementado**. Este documento preserva o plano do slice. A `Home` é o
+menu atual: o modo **Jogar contra bots** cria a sala, preenche as vagas e a
+inicia; o modo **Versus** mantém o lobby, o código de sala e o convite.
 
 ## Objetivo
 
@@ -36,7 +37,8 @@ Início
 - Sem dependências novas.
 - Sem mudança em `packages/engine`.
 - Sem mudança no protocolo de `packages/shared`.
-- Sem mudança no servidor: o criador já é owner e pode enviar `fillBots`.
+- O criador é owner e pode enviar `fillBots`; como o início do lobby é manual, o
+  cliente também envia `startGame` para este modo direto.
 - Sem configuração de quantidade ou dificuldade dos bots.
 
 ## Etapas
@@ -57,8 +59,8 @@ Comportamento:
 2. Criar sala `truco`.
 3. Registrar handlers.
 4. Persistir sessão.
-5. Enviar `fillBots`.
-6. Snapshot `playing` leva o usuário para `mesa`.
+5. Enviar `fillBots` e `startGame`.
+6. O snapshot `playing` leva o usuário para `mesa`.
 
 Reutilizar a lógica atual de `createRoom`; extrair helper somente se reduzir
 duplicação real.
@@ -104,7 +106,7 @@ Cobrir:
 
 - jogo contra bots exige nome;
 - cria sala com o nome informado;
-- envia `fillBots` após conexão;
+- envia `fillBots` e `startGame` após conexão;
 - erro de criação volta a um estado utilizável;
 - fluxo versus não envia `fillBots`;
 - snapshots mudam `lobby` para `mesa` corretamente.
@@ -135,19 +137,19 @@ Rodar E2E conforme o script existente do projeto.
 
 ## Critérios de aceite
 
-- [ ] Home pede nome antes de qualquer modo.
-- [ ] "Jogar contra bots" cria jogo com exatamente 1 humano e 3 bots.
-- [ ] Modo bots abre a mesa sem ação manual no lobby.
-- [ ] Nome informado aparece corretamente na partida.
-- [ ] "Versus" preserva criação e entrada em lobby.
-- [ ] Código de sala continua funcional.
-- [ ] Reconexão continua funcional nos dois modos.
-- [ ] Erro de rede não deixa a interface travada.
-- [ ] Interface funciona em 390 px.
-- [ ] Navegação por teclado e foco continuam acessíveis.
-- [ ] Nenhuma carta privada vaza.
-- [ ] `pnpm gate` verde.
-- [ ] Simulação de 10 mil partidas passa.
+- [x] Home pede nome antes de qualquer modo.
+- [x] "Jogar contra bots" cria jogo com exatamente 1 humano e 3 bots.
+- [x] Modo bots abre a mesa sem ação manual no lobby.
+- [x] Nome informado aparece corretamente na partida.
+- [x] "Versus" preserva criação e entrada em lobby.
+- [x] Código de sala continua funcional.
+- [x] Reconexão continua funcional nos dois modos.
+- [x] Erro de rede não deixa a interface travada.
+- [x] Interface funciona em 390 px.
+- [x] Navegação por teclado e foco continuam acessíveis.
+- [x] Nenhuma carta privada vaza.
+- [x] `pnpm gate` verde no slice.
+- [x] Simulação de 10 mil partidas passa no slice.
 
 ## Riscos
 
@@ -170,7 +172,8 @@ Rodar E2E conforme o script existente do projeto.
 - Tela adicional de seleção.
 - Mudanças de deploy F6.
 
-## Próximo passo
+## Resultado
 
-Despachar a implementação ao `builder` quando o humano pedir. Depois, `tester`
-para os testes e `reviewer` para a revisão.
+O plano foi implementado e coberto pelos testes de store e E2E. Alterações
+futuras devem partir do comportamento documentado no [README](../README.md), não
+deste roteiro histórico.
