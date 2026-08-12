@@ -23,7 +23,8 @@ test.describe("Mesa Social & Juice Features (F4/F5)", () => {
     });
     const fillBotsBtn = page.locator('[data-testid="fill-bots-btn"]');
     await expect(fillBotsBtn).toBeVisible();
-    fillBotsBtn.click();
+    await fillBotsBtn.click();
+    await page.locator('[data-testid="start-btn"]').click();
 
     // 4. Mesa - Verify mesa screen loaded
     await expect(page.locator('[data-testid="mesa-screen"]')).toBeVisible({

@@ -12,6 +12,7 @@ import {
   pickUniquePlayerNames,
   validateAction,
   validateSetNickname,
+  validateSwapSeats,
   validateChat,
   validateEmote,
   validateThrowTomato,
@@ -135,6 +136,9 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
   /** Dono da sala (primeiro a entrar). */
   private ownerSessionId: string | null = null;
 
+  /** Dono rearranjou assentos no lobby — não renormalizar em fillBots. */
+  private seatsArranged = false;
+
   private match!: ReturnType<typeof createMatch>;
 
   private status: "waiting" | "playing" | "finished" = "waiting";
@@ -215,17 +219,8 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       this.ownerSessionId = client.sessionId;
     }
 
-    // Quarto ocupante (humano ou bot) → inicia partida, locka sala.
-    if (this.occupied.size + this.botSeats.size === MAX_SEATS) {
-      this.status = "playing";
-      this.setState({ status: this.status });
-      this.broadcastSnapshots([]);
-      void this.lock();
-      this.scheduleBotTurn();
-    } else {
-      // Ainda no lobby: notifica todos os presentes (novo jogador entrou).
-      this.broadcastSnapshots([]);
-    }
+    // Lobby: notifica todos os presentes (início é manual via startGame).
+    this.broadcastSnapshots([]);
   }
 
   override async onLeave(client: Client, code?: number): Promise<void> {
@@ -391,6 +386,16 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       return;
     }
 
+    if (type === "startGame") {
+      if (client.sessionId === this.ownerSessionId) this.startGame();
+      return;
+    }
+
+    if (type === "swapSeats") {
+      this.handleSwapSeats(client, message);
+      return;
+    }
+
     if (type === "setNickname") {
       this.handleSetNickname(client, message);
       return;
@@ -419,7 +424,17 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     // Mensagem desconhecida – ignora.
   }
 
-  // -- fillBots ---------------------------------------------------------
+  // -- startGame / fillBots / swapSeats ---------------------------------
+
+  private startGame(): void {
+    if (this.status !== "waiting") return;
+    if (this.occupied.size + this.botSeats.size !== MAX_SEATS) return;
+    this.status = "playing";
+    this.setState({ status: this.status });
+    this.broadcastSnapshots([]);
+    void this.lock();
+    this.scheduleBotTurn();
+  }
 
   private handleFillBots(client: Client): void {
     // Só o dono pode preencher.
@@ -431,7 +446,8 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     // Normaliza assentos: humanos (na ordem em que entraram) ocupam os
     // assentos mais baixos (0..N-1); bots preenchem o resto. Com 2 humanos
     // isso garante 1 humano por time (times são 0/2 vs 1/3).
-    this.normalizeHumanSeats();
+    // Se o dono já rearranjou, preserva o arranjo.
+    if (!this.seatsArranged) this.normalizeHumanSeats();
 
     const seatsToFill = [...this.freeSeats];
     if (seatsToFill.length === 0) return;
@@ -451,15 +467,60 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       if (idx !== -1) this.freeSeats.splice(idx, 1);
     });
 
-    // Se todos os 4 seats estão ocupados (humanos + bots), inicia.
-    if (this.occupied.size + this.botSeats.size === MAX_SEATS) {
-      this.status = "playing";
-      this.setState({ status: this.status });
-      this.broadcastSnapshots([]);
-      void this.lock();
-      this.scheduleBotTurn();
-    } else {
-      this.broadcastSnapshots([]);
+    this.broadcastSnapshots([]);
+  }
+
+  private handleSwapSeats(client: Client, message: unknown): void {
+    if (client.sessionId !== this.ownerSessionId) return;
+    if (this.status !== "waiting") return;
+    const p = validateSwapSeats(message);
+    if (!p || p.a === p.b) return;
+    this.swapSeat(p.a, p.b);
+    this.seatsArranged = true;
+    this.broadcastSnapshots([]);
+  }
+
+  /** Troca a ocupação de dois assentos nas quatro estruturas indexadas. */
+  private swapSeat(a: number, b: number): void {
+    let sessionA: string | undefined;
+    let sessionB: string | undefined;
+    for (const [sessionId, seat] of this.occupied) {
+      if (seat === a) sessionA = sessionId;
+      if (seat === b) sessionB = sessionId;
+    }
+    if (sessionA !== undefined) this.occupied.set(sessionA, b);
+    if (sessionB !== undefined) this.occupied.set(sessionB, a);
+
+    const aIsBot = this.botSeats.has(a);
+    const bIsBot = this.botSeats.has(b);
+    if (aIsBot !== bIsBot) {
+      if (aIsBot) {
+        this.botSeats.delete(a);
+        this.botSeats.add(b);
+      } else {
+        this.botSeats.delete(b);
+        this.botSeats.add(a);
+      }
+    }
+
+    const nickA = this.nicknames.get(a);
+    const nickB = this.nicknames.get(b);
+    if (nickB !== undefined) this.nicknames.set(a, nickB);
+    else this.nicknames.delete(a);
+    if (nickA !== undefined) this.nicknames.set(b, nickA);
+    else this.nicknames.delete(b);
+
+    const aFree = this.freeSeats.includes(a);
+    const bFree = this.freeSeats.includes(b);
+    if (aFree !== bFree) {
+      if (aFree) {
+        this.freeSeats = this.freeSeats.filter((s) => s !== a);
+        this.freeSeats.push(b);
+      } else {
+        this.freeSeats = this.freeSeats.filter((s) => s !== b);
+        this.freeSeats.push(a);
+      }
+      this.freeSeats.sort((x, y) => x - y);
     }
   }
 
@@ -880,6 +941,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
         prngVersion: PRNG_VERSION,
       },
       nicknames: nicknamesRecord,
+      botSeats: [...this.botSeats],
       // ponytail: manda o log inteiro em cada snapshot (~30KB no fim de uma
       // partida longa). Se o tráfego incomodar, mandar só a cauda com índice.
       log: [...this.log],

@@ -239,8 +239,9 @@ describe("F7 - Substituição de Humano por Bot & Reconexão", () => {
     const c2 = await connectWithQueue(gameServer, room);
     await drainJoinSnapshots([c1, c2]);
 
-    // Dono (c1) chama fillBots
+    // Dono (c1) chama fillBots e startGame
     c1.raw.send("fillBots", {});
+    c1.raw.send("startGame", {});
 
     // Aguarda sala ficar "playing" para ambos
     await pollCondition(async () => {

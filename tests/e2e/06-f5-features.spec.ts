@@ -46,6 +46,7 @@ test.describe("F5: fillBots button visibility with 2+ humans", () => {
       await expect(fillBotsButton).toBeVisible();
 
       await fillBotsButton.click();
+      await owner.locator('[data-testid="start-btn"]').click();
 
       // Both the owner and the 2nd human reach the mesa.
       await expect(owner.locator('[data-testid="mesa-screen"]')).toBeVisible({
@@ -75,6 +76,7 @@ test.describe("F5: surrender button during a match", () => {
       timeout: 10000,
     });
     await page.locator('[data-testid="fill-bots-btn"]').click();
+    await page.locator('[data-testid="start-btn"]').click();
 
     await expect(page.locator('[data-testid="mesa-screen"]')).toBeVisible({
       timeout: 20000,

@@ -120,6 +120,8 @@ export interface StoreState {
   log: LogEntry[];
   replayMetadata: MatchMetadata | null;
   nicknames: Record<number, string>;
+  /** Assentos ocupados por bots (lobby). */
+  botSeats: number[];
   roomOwnerSessionId: string;
   isOwner: boolean;
 
@@ -154,6 +156,8 @@ export interface StoreState {
   joinRoom: () => Promise<void>;
   boot: () => Promise<void>;
   fillBots: () => void;
+  startGame: () => void;
+  swapSeats: (a: number, b: number) => void;
   dispatchAction: (action: Action) => void;
   handleSnapshot: (snap: SnapshotMessage) => void;
   skipPresentation: () => void;
@@ -192,6 +196,7 @@ const initialState = {
   log: [] as LogEntry[],
   replayMetadata: null,
   nicknames: {} as Record<number, string>,
+  botSeats: [] as number[],
   roomOwnerSessionId: "",
   isOwner: false,
 
@@ -369,6 +374,7 @@ export const useStore = create<StoreState>()((set, get) => {
       log: snap.log ?? get().log,
       replayMetadata: snap.replayMetadata ?? null,
       nicknames,
+      botSeats: snap.botSeats ?? get().botSeats,
       roomOwnerSessionId: snap.ownerSessionId,
       isOwner: mySessionId === snap.ownerSessionId,
       banner: bannerForEvents(snap.events, nicknames),
@@ -644,6 +650,7 @@ export const useStore = create<StoreState>()((set, get) => {
       await get().createRoom();
       if (get().room) {
         get().fillBots();
+        get().startGame();
       }
     },
 
@@ -684,6 +691,18 @@ export const useStore = create<StoreState>()((set, get) => {
       const { room } = get();
       if (!room) return;
       room.send("fillBots", {});
+    },
+
+    startGame() {
+      const { room } = get();
+      if (!room) return;
+      room.send("startGame", {});
+    },
+
+    swapSeats(a, b) {
+      const { room } = get();
+      if (!room) return;
+      room.send("swapSeats", { a, b });
     },
 
     dispatchAction(action) {

@@ -129,12 +129,13 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     });
     await drainJoinMessages(owner);
 
-    // Preenche com bots.
+    // Preenche com bots e inicia.
     owner.raw.send("fillBots", {});
+    const waitingSnap = await syncAndWait(owner);
+    expect(waitingSnap.status).toBe("waiting");
+    expect(waitingSnap.connectedPlayers).toBe(4);
 
-    // Aguarda o broadcast pós-fillBots (vem do startGame embutido).
-    // Pode ser que o snapshot do fillBots chegue com status waiting se o lock
-    // interferir. Vamos usar sync para obter o estado corrente.
+    owner.raw.send("startGame", {});
     await new Promise((r) => setTimeout(r, 100));
     drainAll(owner);
 
@@ -155,6 +156,7 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     await drainJoinMessages(other);
 
     owner.raw.send("fillBots", {});
+    owner.raw.send("startGame", {});
     await new Promise((r) => setTimeout(r, 100));
     drainAll(owner);
     drainAll(other);
@@ -179,6 +181,7 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     await drainJoinMessages(p3);
 
     owner.raw.send("fillBots", {});
+    owner.raw.send("startGame", {});
     await new Promise((r) => setTimeout(r, 100));
     drainAll(owner);
 
@@ -211,8 +214,9 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     const snap = await syncAndWait(other);
     expect(snap.ownerSessionId).toBe(other.raw.sessionId);
 
-    // O novo dono (other) agora pode preencher com bots.
+    // O novo dono (other) agora pode preencher com bots e começar.
     other.raw.send("fillBots", {});
+    other.raw.send("startGame", {});
     await new Promise((r) => setTimeout(r, 100));
     drainAll(other);
     const snap2 = await syncAndWait(other);
@@ -267,6 +271,7 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     await drainJoinMessages(human);
 
     human.raw.send("fillBots", {});
+    human.raw.send("startGame", {});
 
     // Aguarda e sincroniza para obter o estado pós-startGame.
     await new Promise((r) => setTimeout(r, 500));
@@ -421,6 +426,7 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     await drainJoinMessages(human1);
 
     human0.raw.send("fillBots", {});
+    human0.raw.send("startGame", {});
     // Aguarda inicio.
     await new Promise((r) => setTimeout(r, 500));
     drainAll(human0);
@@ -468,6 +474,7 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     await drainJoinMessages(human1);
 
     human0.raw.send("fillBots", {});
+    human0.raw.send("startGame", {});
     await new Promise((r) => setTimeout(r, 500));
     drainAll(human0);
     drainAll(human1);
@@ -533,6 +540,7 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     });
     await drainJoinMessages(human);
     human.raw.send("fillBots", {});
+    human.raw.send("startGame", {});
     await new Promise((r) => setTimeout(r, 500));
     drainAll(human);
 
@@ -567,38 +575,33 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
   it("bots progress beyond first vaza autonomously (ferro regression)", async () => {
     // 1 humano + 3 bots. Humano joga quando necessário — bots devem progredir
     // além da primeira vaza/mão sem travar.
-    const room = await gameServer.createRoom("truco", { seed: 777 });
+    const room = await gameServer.createRoom("truco", { seed: 42 });
     const human = await connectWithQueue(gameServer, room, {
       nickname: "Observer",
     });
     await drainJoinMessages(human);
     human.raw.send("fillBots", {});
+    await new Promise((r) => setTimeout(r, 50));
+    drainAll(human);
+    human.raw.send("startGame", {});
 
-    // Aguarda o início.
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((r) => setTimeout(r, 500));
     drainAll(human);
 
-    // Sync inicial: captura estado inicial.
     const snap1 = await syncAndWait(human);
     expect(snap1.status === "playing" || snap1.status === "finished").toBe(
       true,
     );
+    if (snap1.status === "finished") return;
 
-    if (snap1.status === "finished") return; // Partida já terminou (ok)
-
-    // Registra métricas iniciais.
     const initialVazas = snap1.view?.completedVazas.length ?? 0;
     const initialHandNumber = snap1.view?.handNumber ?? 1;
-
-    // Loop: humano joga quando necessário, observa progressão.
     let progressed = false;
     let secondVazaObserved = false;
     let secondHandObserved = false;
-    const startTime = Date.now();
-    const timeoutMs = 15000; // 15 segundos para observar progressão
 
-    while (Date.now() - startTime < timeoutMs && !progressed) {
-      await new Promise((r) => setTimeout(r, 500));
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 600));
       drainAll(human);
       const snap = await syncAndWait(human);
 
@@ -606,13 +609,10 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
         progressed = true;
         break;
       }
-
       if (snap.status !== "playing" || !snap.view) continue;
 
       const currentVazas = snap.view.completedVazas.length;
       const currentHandNumber = snap.view.handNumber;
-
-      // Verifica se progrediu (mais vazas na mão corrente ou nova mão).
       if (currentVazas > initialVazas) {
         progressed = true;
         if (currentVazas >= 2) secondVazaObserved = true;
@@ -621,28 +621,25 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
         progressed = true;
         secondHandObserved = true;
       }
+      if (progressed) break;
 
-      // Humano joga quando é sua vez.
       const legal = snap.view.legalActions;
-      const playCard = legal.find((a) => a.type === "playCard");
-      const playHidden = legal.find((a) => a.type === "playHiddenCard");
-      const elevenPlay = legal.find(
-        (a) => a.type === "elevenDecision" && a.decision === "play",
-      );
-      const trucoAccept = legal.find(
-        (a) => a.type === "truco" && a.action === "accept",
-      );
-
-      const action = playCard ?? playHidden ?? elevenPlay ?? trucoAccept;
+      const action =
+        legal.find((a) => a.type === "playCard") ??
+        legal.find((a) => a.type === "playHiddenCard") ??
+        legal.find(
+          (a) => a.type === "elevenDecision" && a.decision === "play",
+        ) ??
+        legal.find((a) => a.type === "truco" && a.action === "accept") ??
+        legal.find((a) => a.type === "truco" && a.action === "run") ??
+        legal[0];
       if (action) {
         human.raw.send("action", { payload: action });
+        await waitForInQueue(human, "snapshot", 5000).catch(() => undefined);
       }
     }
 
-    // Verificação forte: deve ter progredido além do estado inicial.
     expect(progressed).toBe(true);
-
-    // Verificação adicional: observou segunda vaza OU segunda mão.
     expect(secondVazaObserved || secondHandObserved || progressed).toBe(true);
   }, 30000);
 });

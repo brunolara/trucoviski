@@ -227,6 +227,7 @@ export function Mesa() {
     tableHold?.sweeping && holdWinner != null
       ? SWEEP_DELTA[getRelativeSeat(holdWinner)]!
       : null;
+  const teamLabel = (team: 0 | 1) => (team === myTeam ? "Nós" : "Eles");
 
   return (
     <div className={styles.viewport}>
@@ -255,6 +256,7 @@ export function Mesa() {
                 className={styles.teamDot}
                 style={{ background: TEAM_COLORS[0] }}
               />
+              <span className={styles.scoreLabel}>{teamLabel(0)}</span>
               <span className={styles.scoreNumber}>{scores[0]}</span>
             </span>
             <span className={styles.divider}>×</span>
@@ -268,6 +270,7 @@ export function Mesa() {
                 style={{ background: TEAM_COLORS[1] }}
               />
               <span className={styles.scoreNumber}>{scores[1]}</span>
+              <span className={styles.scoreLabel}>{teamLabel(1)}</span>
             </span>
           </div>
           <div className={styles.viraTop} data-testid="round-info">
@@ -494,7 +497,16 @@ export function Mesa() {
                   </div>
 
                   {/* Player nickname */}
-                  <div className={styles.seatName}>
+                  <div
+                    className={`${styles.seatName} ${
+                      isMe || relSeat === 2 ? styles.seatNameTeam : ""
+                    }`}
+                    style={
+                      isMe || relSeat === 2
+                        ? { color: TEAM_COLORS[seatTeam(absSeat)] }
+                        : undefined
+                    }
+                  >
                     {name} {isMe && "(Você)"}
                   </div>
 

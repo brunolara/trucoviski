@@ -9,8 +9,6 @@
 }
 
 .screen {
-  --team-blue: #7be89a;
-  --team-red: #d98a8a;
   position: relative;
   width: 430px;
   height: 932px;
@@ -78,17 +76,12 @@
   line-height: 1;
 }
 
-.teamScore::before {
+.scoreLabel {
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   color: currentcolor;
 }
-.teamScore:first-child::before {
-  content: "NÓS";
-}
-.teamScore:last-child::before {
-  content: "ELES";
-}
+
 .scoreNumber {
   font-size: 26px;
 }
@@ -240,6 +233,11 @@
   font-family: "Press Start 2P", monospace;
   font-size: 6px;
   white-space: nowrap;
+}
+.seatNameTeam {
+  border-bottom: 2px solid currentColor;
+  text-shadow: 0 1px 0 currentColor;
+  padding-bottom: 1px;
 }
 .seat1 .seatName,
 .seat3 .seatName {

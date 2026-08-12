@@ -215,6 +215,8 @@ describe("TrucoRoom (F2 slice 1)", () => {
 
     // Drena snapshots de onJoin (1 por cliente).
     await drainJoinSnapshots(allCc);
+    // Dono inicia a partida (sem auto-start no 4º join).
+    allCc[0]!.raw.send("startGame", {});
     // Espera a sala virar "playing" e drena o backlog de broadcasts.
     await waitPlayingAndDrain(allCc);
     return allCc;
@@ -285,6 +287,9 @@ describe("TrucoRoom (F2 slice 1)", () => {
       drainJoinSnapshots(c).then(() => c),
     );
 
+    // Dono inicia a partida.
+    allCc[0]!.raw.send("startGame", {});
+
     // Espera a sala virar "playing" e drena o backlog de broadcasts.
     await waitPlayingAndDrain(allCc);
 
@@ -325,7 +330,7 @@ describe("TrucoRoom (F2 slice 1)", () => {
     expect(finalSnap.replayMetadata?.seed).toBe(SEED);
   });
 
-  it("sends playing status on broadcast after 4th joins", async () => {
+  it("sends playing status on broadcast after startGame with 4 seats", async () => {
     const allCc = await setup4Players(SEED);
     const snap = await syncAndWait(allCc[0]!);
     expect(snap.status).toBe("playing");

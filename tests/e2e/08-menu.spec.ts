@@ -82,6 +82,51 @@ test.describe("Menu Home", () => {
     }
   });
 
+  test("dono troca assentos e o jogador aparece no time vermelho", async ({
+    browser,
+  }) => {
+    test.setTimeout(60000);
+    const owner = await browser.newPage();
+    const other = await browser.newPage();
+
+    try {
+      await owner.goto("/");
+      await owner.getByTestId("nickname-input").fill("Dono");
+      await owner.getByTestId("create-room-btn").click();
+      await expect(owner.getByTestId("lobby-screen")).toBeVisible({
+        timeout: 15000,
+      });
+
+      const roomCode = await owner.getByTestId("room-code").textContent();
+      if (!roomCode) throw new Error("room code not captured");
+
+      await other.goto("/");
+      await other.getByTestId("nickname-input").fill("Convidado");
+      await other.getByTestId("room-id-input").fill(roomCode);
+      await other.getByTestId("join-room-btn").click();
+
+      await expect(owner.getByTestId("lobby-seat-1")).toContainText(
+        "Convidado",
+        { timeout: 10000 },
+      );
+
+      // Troca seat 1 → seat 3 (time vermelho = seats 1 e 3)
+      await owner.getByTestId("lobby-seat-1").click();
+      await owner.getByTestId("lobby-seat-3").click();
+
+      await expect(owner.getByTestId("lobby-team-1")).toContainText(
+        "Convidado",
+        { timeout: 10000 },
+      );
+      await expect(owner.getByTestId("lobby-seat-3")).toContainText(
+        "Convidado",
+      );
+    } finally {
+      await owner.close();
+      await other.close();
+    }
+  });
+
   test("layout utilizável em viewport 390px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");

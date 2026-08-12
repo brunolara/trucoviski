@@ -209,6 +209,7 @@ describe("TrucoRoom (F4: Social & Rate Limits)", () => {
     await drainJoinMessages(human);
 
     human.raw.send("fillBots", {});
+    human.raw.send("startGame", {});
     let snap = (await waitForInQueue(human, "snapshot")) as {
       status: string;
       log?: { kind: string; event?: { type: string } }[];
