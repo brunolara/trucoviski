@@ -97,6 +97,24 @@ describe("botAdvice", () => {
     expect(seat0).not.toBe(seat1);
   });
 
+  it("advises even when the human partner is the one who must respond", () => {
+    // O engine só dá accept/run ao responder; o parceiro bot fica sem ação
+    // de truco e ainda assim precisa opinar.
+    const view: PlayerView = {
+      ...baseView,
+      mySeat: 2,
+      trucoPendingTeam: 1,
+      trucoPendingValue: 6,
+      handCards: [
+        { suit: "paus", rank: "5" },
+        { suit: "copas", rank: "5" },
+        { suit: "espadas", rank: "5" },
+      ],
+      legalActions: [],
+    };
+    expect(botAdvice(view)).toBe("Aumenta. Eles tão blefando.");
+  });
+
   it("returns null when only playCard is legal", () => {
     const view: PlayerView = {
       ...baseView,

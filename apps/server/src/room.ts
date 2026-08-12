@@ -4,7 +4,7 @@
 
 import { Room, type Client } from "colyseus";
 import { randomInt } from "node:crypto";
-import { createMatch, paulista } from "@trucoviski/engine";
+import { createMatch, paulista, teamForSeat } from "@trucoviski/engine";
 import { PRNG_VERSION } from "@trucoviski/engine";
 import type { Seat, GameEvent, PlayerView } from "@trucoviski/engine";
 import {
@@ -80,11 +80,37 @@ const PERSONAS = [
 export function botAdvice(view: PlayerView): string | null {
   const persona = PERSONAS[view.mySeat % PERSONAS.length];
   if (!persona) return null;
-  const action = decideBotAction(view);
+  const action = decideBotAction(withTrucoResponse(view));
   if (action?.type === "truco") return persona[action.action] ?? null;
   if (action?.type === "elevenDecision")
     return action.decision === "play" ? persona.play : persona.fold;
   return null;
+}
+
+/**
+ * O engine só dá accept/run/raise ao assento que está sendo pedido. Para o
+ * parceiro bot opinar sobre um truco que o humano é quem responde, ele precisa
+ * receber a mesma pergunta na mão dele.
+ */
+function withTrucoResponse(view: PlayerView): PlayerView {
+  if (view.trucoPendingTeam === null) return view;
+  if (view.trucoPendingTeam === teamForSeat(view.mySeat)) return view;
+  if (view.legalActions.some((a) => a.type === "truco")) return view;
+
+  const seq = paulista.trucoSequence;
+  const canRaise =
+    view.trucoPendingValue !== null &&
+    seq.indexOf(view.trucoPendingValue) < seq.length - 1;
+
+  return {
+    ...view,
+    legalActions: [
+      ...view.legalActions,
+      { type: "truco", action: "accept" },
+      { type: "truco", action: "run" },
+      ...(canRaise ? [{ type: "truco", action: "raise" } as const] : []),
+    ],
+  };
 }
 
 function hasHoldEvent(events: readonly GameEvent[]): boolean {
@@ -704,12 +730,12 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
       return;
     }
 
-    // Caso 2: truco pendente → time oposto responde, prefere humano.
+    // Caso 2: truco pendente → só um seat responde (o engine escolhe qual),
+    // então não há preferência humana a aplicar: se o responder é bot, ele age.
     if (hand.trucoPendingTeam !== null) {
-      const respondingTeam: 0 | 1 = hand.trucoPendingTeam === 0 ? 1 : 0;
-      if (this.hasHumanOnTeam(respondingTeam)) return;
-      const botSeat = this.firstBotOnTeam(respondingTeam);
-      if (botSeat !== null) this.dispatchBotAction(botSeat as Seat, delayMs);
+      const responder = this.trucoResponderSeat();
+      if (responder === null || !this.botSeats.has(responder)) return;
+      this.dispatchBotAction(responder as Seat, delayMs);
       return;
     }
 
@@ -782,18 +808,26 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     return false;
   }
 
-  /** Uma decisão de equipe pendente não pode ser tomada pelo bot se há aliado humano. */
+  /**
+   * Só a mão de onze é decisão de time (os dois seats recebem a ação legal) e
+   * portanto fica reservada ao humano. A resposta ao truco tem um único
+   * responder definido pelo engine — reservá-la travaria a mão quando o
+   * responder é bot e o parceiro é humano.
+   */
   private isTeamDecisionReservedForHuman(botSeat: Seat): boolean {
     const state = this.match.state();
-    if (state.phase === "elevenDecision") {
-      const team: 0 | 1 = state.scores[0] === 11 ? 0 : 1;
-      return this.seatTeam(botSeat) === team && this.hasHumanOnTeam(team);
-    }
-
-    const pendingTeam = state.hand?.trucoPendingTeam;
-    if (pendingTeam === null || pendingTeam === undefined) return false;
-    const team: 0 | 1 = pendingTeam === 0 ? 1 : 0;
+    if (state.phase !== "elevenDecision") return false;
+    const team: 0 | 1 = state.scores[0] === 11 ? 0 : 1;
     return this.seatTeam(botSeat) === team && this.hasHumanOnTeam(team);
+  }
+
+  /** Seat que o engine designou para responder ao truco pendente. */
+  private trucoResponderSeat(): number | null {
+    for (let s = 0; s < MAX_SEATS; s++) {
+      const v = this.match.playerView(s as Seat);
+      if (v.legalActions.some((a) => a.type === "truco")) return s;
+    }
+    return null;
   }
 
   private seatTeam(seat: Seat): 0 | 1 {
@@ -907,6 +941,12 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     if (!this.hasHumanOnTeam(team)) return;
     const botSeat = this.firstBotOnTeam(team);
     if (botSeat === null) return;
+    // Se quem responde é o próprio bot, ele age — conselho seria ruído.
+    if (
+      st.hand.trucoPendingTeam !== null &&
+      this.trucoResponderSeat() === botSeat
+    )
+      return;
     if (this.lastAdviceKey === key) return;
     this.lastAdviceKey = key;
 
