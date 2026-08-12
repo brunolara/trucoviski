@@ -14,8 +14,11 @@ import type {
   Seat,
   LogEntry,
 } from "@trucoviski/shared";
-import { NICKNAME_MAX_LENGTH } from "@trucoviski/shared";
+import { NICKNAME_MAX_LENGTH, normalizeRoomCode } from "@trucoviski/shared";
 import { sounds } from "./utils/sounds.js";
+import { getClientId } from "./utils/clientId.js";
+
+const CLIENT_ID = getClientId();
 
 // ---- Session persistence (F: sobreviver ao F5) -----------------------
 
@@ -122,7 +125,6 @@ export interface StoreState {
   nicknames: Record<number, string>;
   /** Assentos ocupados por bots (lobby). */
   botSeats: number[];
-  roomOwnerSessionId: string;
   isOwner: boolean;
 
   // Social state (F4)
@@ -197,7 +199,6 @@ const initialState = {
   replayMetadata: null,
   nicknames: {} as Record<number, string>,
   botSeats: [] as number[],
-  roomOwnerSessionId: "",
   isOwner: false,
 
   // Social
@@ -329,9 +330,6 @@ function bannerForEvents(
 export const useStore = create<StoreState>()((set, get) => {
   const snapshotQueue: SnapshotMessage[] = [];
   let processingQueue = false;
-  // Sessão local (setada de forma síncrona ao conectar, antes de qualquer
-  // snapshot enfileirado ser processado — evita a corrida com get().room).
-  let mySessionId: string | null = null;
 
   function applySnapshot(snap: SnapshotMessage): void {
     const prevView = get().view;
@@ -375,8 +373,7 @@ export const useStore = create<StoreState>()((set, get) => {
       replayMetadata: snap.replayMetadata ?? null,
       nicknames,
       botSeats: snap.botSeats ?? get().botSeats,
-      roomOwnerSessionId: snap.ownerSessionId,
-      isOwner: mySessionId === snap.ownerSessionId,
+      isOwner: snap.isOwner,
       banner: bannerForEvents(snap.events, nicknames),
     });
 
@@ -442,8 +439,6 @@ export const useStore = create<StoreState>()((set, get) => {
    * Handlers de mensagem compartilhados entre createRoom e joinRoom (F4).
    */
   function registerRoomHandlers(room: Room): void {
-    mySessionId = room.sessionId;
-
     room.onMessage("snapshot", (snap: SnapshotMessage) => {
       get().handleSnapshot(snap);
     });
@@ -598,7 +593,9 @@ export const useStore = create<StoreState>()((set, get) => {
     },
 
     setRoomId(id) {
-      set({ roomId: id.trim() });
+      // ponytail: normaliza no join, não a cada tecla — senão o espaço some
+      // e não dá pra digitar a segunda palavra.
+      set({ roomId: id });
     },
 
     setConnecting(v) {
@@ -623,7 +620,10 @@ export const useStore = create<StoreState>()((set, get) => {
 
       try {
         const client = new Client(SERVER_URL);
-        const room = await client.create("truco", { nickname });
+        const room = await client.create("truco", {
+          nickname,
+          clientId: CLIENT_ID,
+        });
 
         // Registra handlers ANTES de atualizar o estado para não perder mensagens iniciais
         registerRoomHandlers(room);
@@ -664,7 +664,10 @@ export const useStore = create<StoreState>()((set, get) => {
 
       try {
         const client = new Client(SERVER_URL);
-        const room = await client.joinById(roomId, { nickname });
+        const room = await client.joinById(normalizeRoomCode(roomId), {
+          nickname,
+          clientId: CLIENT_ID,
+        });
 
         // Registra handlers ANTES de atualizar o estado para não perder mensagens iniciais
         registerRoomHandlers(room);
@@ -754,7 +757,6 @@ export const useStore = create<StoreState>()((set, get) => {
       }
       snapshotQueue.length = 0;
       processingQueue = false;
-      mySessionId = null;
       clearSession();
       set({ ...initialState, screen: "home" });
     },
@@ -774,7 +776,6 @@ export const useStore = create<StoreState>()((set, get) => {
       }
       snapshotQueue.length = 0;
       processingQueue = false;
-      mySessionId = null;
       clearSession();
       set({ ...initialState });
     },
@@ -805,9 +806,13 @@ export const useStore = create<StoreState>()((set, get) => {
 
         try {
           const client = new Client(SERVER_URL);
-          const room = await client.joinById(session.roomId, {
-            nickname: session.nickname,
-          });
+          const room = await client.joinById(
+            normalizeRoomCode(session.roomId),
+            {
+              nickname: session.nickname,
+              clientId: CLIENT_ID,
+            },
+          );
           registerRoomHandlers(room);
           room.send("sync", {});
           persistSession(room, session.nickname);

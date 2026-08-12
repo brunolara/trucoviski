@@ -37,12 +37,14 @@ endereço.
 
 1. Informe um nome na Home.
 2. Escolha **Jogar contra bots** para iniciar uma mesa com três bots, ou
-   **Versus** para criar/entrar em uma sala.
+   **Versus** para criar/entrar em uma sala. O código da sala são duas palavras
+   (`morango exemplar`); maiúscula, acento, espaço ou hífen são aceitos.
 3. No lobby, o dono pode preencher vagas com bots, organizar os assentos por
    toque ou arrasto e iniciar a partida quando houver quatro participantes.
 
-Os assentos `0`/`2` formam o time azul e `1`/`3` o time vermelho. O cliente
-preserva a sessão da aba para reconexão enquanto a sala estiver ativa.
+Os assentos `0`/`2` formam o time azul e `1`/`3` o time vermelho. Uma sala vazia
+permanece 5 minutos; voltar pelo código retoma o assento. Sem humano conectado,
+os bots pausam e a partida congela.
 
 ## Funcionalidades
 
@@ -53,7 +55,9 @@ preserva a sessão da aba para reconexão enquanto a sala estiver ativa.
 - Chat, emojis, tomates, histórico da partida, apresentação de vazas/mãos,
   controles por clique, toque ou arrasto e PWA instalável.
 - Reconexão: um bot assume temporariamente o assento de um humano desconectado e
-  o libera se ele retornar em até 180 segundos.
+  o libera se ele retornar em até 180 segundos. Depois disso, ou após fechar a
+  aba, o mesmo navegador retoma o assento pelo código da sala. Sem humano
+  conectado, os bots pausam.
 
 As regras e decisões de produto estão em [docs/decisions.md](docs/decisions.md).
 

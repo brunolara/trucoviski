@@ -148,6 +148,7 @@ describe("store menu — validação e snapshot", () => {
   it("snapshot playing muda lobby para mesa", () => {
     useStore.setState({ screen: "lobby", nickname: "Humano" });
     const snap: SnapshotMessage = {
+      type: "snapshot",
       seat: 0,
       status: "playing",
       connectedPlayers: 4,
@@ -159,7 +160,7 @@ describe("store menu — validação e snapshot", () => {
       view: null,
       events: [],
       nicknames: { 0: "Humano", 1: "Bot 2", 2: "Bot 3", 3: "Bot 4" },
-      ownerSessionId: "session-owner",
+      isOwner: true,
     };
     useStore.getState().handleSnapshot(snap);
     expect(useStore.getState().screen).toBe("mesa");
@@ -203,6 +204,7 @@ describe("store menu — rede e fillBots", () => {
 
     expect(mockCreate).toHaveBeenCalledWith("truco", {
       nickname: "Versus",
+      clientId: expect.stringMatching(/.{8,}/),
     });
     expect(mockRoomSend).toHaveBeenCalledWith("sync", {});
     expect(mockRoomSend).not.toHaveBeenCalledWith(
@@ -224,6 +226,7 @@ describe("store menu — rede e fillBots", () => {
 
     expect(mockCreate).toHaveBeenCalledWith("truco", {
       nickname: "BotMode",
+      clientId: expect.stringMatching(/.{8,}/),
     });
     expect(mockRoomSend).toHaveBeenCalledWith("fillBots", {});
     expect(mockRoomSend).toHaveBeenCalledWith("startGame", {});
@@ -268,6 +271,7 @@ describe("store menu — boot reconexão (cobre ambos modos, idênticos)", () =>
     expect(mockReconnect).toHaveBeenCalledWith("stale-token");
     expect(mockJoinById).toHaveBeenCalledWith("room-42", {
       nickname: "FallbackUser",
+      clientId: expect.stringMatching(/.{8,}/),
     });
     expect(useStore.getState().screen).toBe("lobby");
     expect(useStore.getState().nickname).toBe("FallbackUser");

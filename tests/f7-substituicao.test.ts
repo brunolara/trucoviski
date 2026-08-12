@@ -445,22 +445,19 @@ describe("F7 - Substituição de Humano por Bot & Reconexão", () => {
   }, 15000);
 
   // -------------------------------------------------------------------
-  // Caso D: Último humano cai → fail-closed preservado (sala fecha)
+  // Caso D: último humano cai → sala persiste (TTL) e bots pausam
   // -------------------------------------------------------------------
-  it("Caso D: Último humano cai → sala fecha (fail-closed, nunca existe sala só de bots)", async () => {
+  it("Caso D: último humano cai → sala persiste e bots pausam", async () => {
     const { internalRoom, c1, c2 } = await setup2Humans2Bots(SEED + 4);
 
-    // Primeiro humano cai
     c1.raw.leave(false);
     await new Promise((r) => setTimeout(r, 100));
     expect(internalRoom.closing).toBe(false);
 
-    // Segundo (último) humano cai
     c2.raw.leave(false);
     await new Promise((r) => setTimeout(r, 100));
 
-    // Sala inicia encerramento
-    expect(internalRoom.closing).toBe(true);
+    expect(internalRoom.closing).toBe(false);
     expect(internalRoom.occupied.size).toBe(0);
   }, 15000);
 
@@ -639,7 +636,7 @@ describe("F7 - Anti-cheat: partnerCards restrito à mão de onze não-ferro", ()
     seat: 0,
     status: "playing",
     connectedPlayers: 4,
-    ownerSessionId: "owner",
+    isOwner: true,
     metadata: {
       rulesetName: "paulista",
       rulesetVersion: "1",

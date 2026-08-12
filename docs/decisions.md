@@ -40,12 +40,12 @@ Nota: o código atual persiste a sessão em `sessionStorage`.
 Durante a partida, se um humano desconectar e ainda restar humano na sala, um
 bot assume seu assento e a partida continua. Queda involuntária reserva o
 assento por 180 segundos; ao voltar nessa janela, o jogador retoma o mesmo
-assento e o bot deixa de jogar; depois dela, o bot fica até o fim da partida.
-Saída voluntária não reserva o assento, mas também é substituída por bot. Se não
-restar humano, a sala fecha como antes (fail-closed). O assento mantém o
-nickname original do jogador enquanto o bot joga. Fora de escopo: turn timer,
-tratamento de AFK, badge visual de bot e identidade persistente entre abas ou
-dispositivos.
+assento e o bot deixa de jogar. Depois dela, ou após fechar a aba, o mesmo
+navegador ainda retoma o assento pelo `clientId` (D-sala-5). Saída voluntária
+não reserva o assento, mas também é substituída por bot e é retomável na hora.
+Se não restar humano, a partida congela e a sala vazia vive 5 minutos (D-sala-1,
+D-sala-2). O assento mantém o nickname original do jogador enquanto o bot joga.
+Fora de escopo: turn timer, tratamento de AFK, badge visual de bot.
 
 ## Desempates aprovados (implementados na F1)
 
@@ -127,3 +127,32 @@ decisões silenciosas de regra.
   operacional documentada, sem adicionar dependência.
 - Smoke pós-deploy valida home (200), `/healthz` (200) e `/monitor` público
   bloqueado (403). A validação autenticada ocorre opcionalmente pelo túnel SSH.
+
+## Decisões de sala persistente
+
+- **D-sala-1** — Sala vazia sobrevive **5 minutos** (`EMPTY_ROOM_TTL_MS`). Vazia
+  = nenhum humano conectado (bots não contam). O prazo é maior que os 180 s de
+  reconexão de propósito: a reconexão nunca deve ser podada pelo TTL.
+- **D-sala-2** — Com a sala em `playing` e nenhum humano conectado, **os bots
+  pausam**. A partida congela exatamente onde parou e retoma quando alguém
+  entra. Bot não termina partida sozinho.
+- **D-sala-3** — Identidade do jogador é um `clientId` gerado no navegador e
+  guardado em `localStorage`. É opaco para o servidor (string, ≤ 64 chars) e não
+  é enviado a outros clientes. Cliente que não mandar `clientId` recai no
+  `sessionId`.
+- **D-sala-4** — Dono é o `clientId` do criador e ele **não perde a posse ao
+  sair**. Enquanto o criador estiver ausente, o humano conectado mais antigo é
+  **dono interino**; o criador retoma a posse ao voltar.
+- **D-sala-5** — Assento pertence ao `clientId`. Voltar à sala em partida só é
+  permitido a quem tem assento guardado que esteja com bot; qualquer outro
+  `joinById` durante `playing`/`finished` é recusado.
+- **D-sala-6** — Código de sala = duas palavras pt-BR sem acento
+  (`morango-exemplar`), exibido com espaço e aceito de qualquer jeito
+  (maiúscula, acento, espaço, hífen). Colisão: sorteia de novo até 10 vezes;
+  esgotou, mantém o id do Colyseus.
+
+Limitação conhecida: quem fecha a aba no meio da partida perde o
+`reconnectionToken` (`sessionStorage`) e, por até 180 s, o matchmaker pode
+responder "sala cheia" porque a reserva de reconexão ainda conta. Passados os
+180 s, a retomada por `clientId` funciona. Saída voluntária (Sair) é retomável
+na hora.

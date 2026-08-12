@@ -74,20 +74,20 @@ describe("F5: validateAction surrender", () => {
   });
 });
 
-describe("F5: SnapshotMessage carries ownerSessionId", () => {
-  it("type allows an ownerSessionId string field", () => {
+describe("F5: SnapshotMessage carries isOwner", () => {
+  it("type allows an isOwner boolean field", () => {
     const snapshot: SnapshotMessage = {
       type: "snapshot",
       seat: 0,
       status: "waiting",
       connectedPlayers: 1,
-      ownerSessionId: "abc123",
+      isOwner: true,
       metadata: {
         rulesetName: "paulista",
         rulesetVersion: "1.0.0",
         prngVersion: "1",
       },
     };
-    expect(snapshot.ownerSessionId).toBe("abc123");
+    expect(snapshot.isOwner).toBe(true);
   });
 });

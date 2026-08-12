@@ -212,7 +212,7 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     drainAll(other);
 
     const snap = await syncAndWait(other);
-    expect(snap.ownerSessionId).toBe(other.raw.sessionId);
+    expect(snap.isOwner).toBe(true);
 
     // O novo dono (other) agora pode preencher com bots e começar.
     other.raw.send("fillBots", {});
@@ -314,14 +314,14 @@ describe("TrucoRoom (F3: bots + nicknames)", () => {
     ).toBe(true);
   }, 30000);
 
-  it("snapshot carries ownerSessionId for joining clients", async () => {
+  it("snapshot carries isOwner for joining clients", async () => {
     const room = await gameServer.createRoom("truco", { seed: SEED });
     const owner = await connectWithQueue(gameServer, room, {
       nickname: "Dono",
     });
 
     const snap = (await waitForInQueue(owner, "snapshot")) as SnapshotMessage;
-    expect(snap.ownerSessionId).toBeTruthy();
+    expect(snap.isOwner).toBe(true);
   });
 
   it("setNickname rejects empty string (Zod min 1)", async () => {
