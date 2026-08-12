@@ -304,6 +304,7 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
         : this.freeSeats[0];
     if (seat === undefined) {
       client.leave();
+      this.armEmptyTimerIfEmpty();
       return;
     }
     this.freeSeats = this.freeSeats.filter((s) => s !== seat);
@@ -323,7 +324,10 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
 
   override async onLeave(client: Client, code?: number): Promise<void> {
     const seat = this.occupied.get(client.sessionId);
-    if (seat === undefined) return;
+    if (seat === undefined) {
+      this.armEmptyTimerIfEmpty();
+      return;
+    }
 
     const consented = code === 1000 || code === 4000;
 
@@ -563,44 +567,46 @@ export class TrucoRoom extends Room<{ state: RoomState }> {
     }
   }
 
-  /** Reatribui humanos aos assentos mais baixos livres, sem roubar reserva de ausente. */
+  /** Humanos nos assentos 0..N-1, na ordem em que ocuparam. */
   private normalizeHumanSeats(): void {
-    const connectedCids = new Set<string>();
-    for (const sessionId of this.occupied.keys()) {
-      const cid = this.clientIds.get(sessionId);
-      if (cid) connectedCids.add(cid);
-    }
-    const reserved = new Set<number>();
-    for (const [cid, seat] of this.seatByClient) {
-      if (!connectedCids.has(cid)) reserved.add(seat);
-    }
-
-    const available: number[] = [];
-    for (let s = 0; s < MAX_SEATS; s++) {
-      if (!reserved.has(s)) available.push(s);
-    }
-
     const humanEntries = [...this.occupied.entries()];
     const newOccupied = new Map<string, number>();
     const newNicknames = new Map<number, string>();
     humanEntries.forEach(([sessionId, oldSeat], i) => {
-      const seat = available[i] ?? i;
-      newOccupied.set(sessionId, seat);
-      newNicknames.set(
-        seat,
-        this.nicknames.get(oldSeat) ?? `Jogador ${seat + 1}`,
-      );
-      const cid = this.clientIds.get(sessionId);
-      if (cid) this.seatByClient.set(cid, seat);
+      newOccupied.set(sessionId, i);
+      newNicknames.set(i, this.nicknames.get(oldSeat) ?? `Jogador ${i + 1}`);
     });
 
     this.occupied = newOccupied;
     this.nicknames = newNicknames;
     this.freeSeats = [];
-    const taken = new Set(newOccupied.values());
-    for (let s = 0; s < MAX_SEATS; s++) {
-      if (!taken.has(s)) this.freeSeats.push(s);
+    for (let s = humanEntries.length; s < MAX_SEATS; s++) {
+      this.freeSeats.push(s);
     }
+
+    const connected = new Set<string>();
+    const nextSeats = new Map<string, number>();
+    for (const [sessionId, seat] of this.occupied) {
+      const cid = this.clientIds.get(sessionId);
+      if (!cid) continue;
+      connected.add(cid);
+      nextSeats.set(cid, seat);
+    }
+    // ponytail: packing não reserva assento (isso colidia humanos). Ausente
+    // só guarda um free leftover — fillBots vira bot, onJoin retoma (D-sala-5).
+    const leftover = [...this.freeSeats];
+    for (const [cid, seat] of this.seatByClient) {
+      if (connected.has(cid)) continue;
+      const kept = leftover.indexOf(seat);
+      if (kept !== -1) {
+        leftover.splice(kept, 1);
+        nextSeats.set(cid, seat);
+      } else {
+        const mapped = leftover.shift();
+        if (mapped !== undefined) nextSeats.set(cid, mapped);
+      }
+    }
+    this.seatByClient = nextSeats;
   }
 
   // -- setNickname ------------------------------------------------------

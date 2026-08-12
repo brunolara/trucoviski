@@ -19,6 +19,8 @@ interface TrucoRoomInternal {
   closing: boolean;
   occupied: Map<string, number>;
   botSeats: Set<number>;
+  seatByClient: Map<string, number>;
+  freeSeats: number[];
   match: ReturnType<typeof createMatch>;
   armEmptyTimer: (ms?: number) => void;
   roomId: string;
@@ -287,6 +289,101 @@ describe("sala persistente", () => {
       ).toBe(true);
     }
   }, 15000);
+
+  it("ausente é remapeado para leftover e retoma o bot no lobby", async () => {
+    const room = await gameServer.createRoom("truco", { seed: SEED + 9 });
+    const owner = await connectWithQueue(gameServer, room, {
+      nickname: "Dono",
+      clientId: "dono-001",
+    });
+    const other = await connectWithQueue(gameServer, room, {
+      nickname: "Parceiro",
+      clientId: "parceiro1",
+    });
+    await drainJoinMessages(owner);
+    await drainJoinMessages(other);
+
+    await owner.raw.leave(true);
+    await sleep(100);
+
+    const internal = room as unknown as TrucoRoomInternal;
+    expect(internal.seatByClient.get("dono-001")).toBe(0);
+    expect(internal.seatByClient.get("parceiro1")).toBe(1);
+    expect(internal.freeSeats).toEqual([0, 2, 3]);
+
+    drainAll(other);
+    other.raw.send("fillBots", {});
+    await sleep(200);
+
+    expect([...internal.occupied.values()]).toEqual([0]);
+    expect([...internal.botSeats].sort()).toEqual([1, 2, 3]);
+    expect(internal.seatByClient.get("parceiro1")).toBe(0);
+    expect(internal.seatByClient.get("dono-001")).toBe(1);
+
+    const back = await connectWithQueue(gameServer, room, {
+      nickname: "Dono",
+      clientId: "dono-001",
+    });
+    await drainJoinMessages(back);
+    drainAll(other);
+    const ownerSnap = await syncAndWait(back);
+    const otherSnap = await syncAndWait(other);
+
+    expect(ownerSnap.seat).toBe(1);
+    expect(ownerSnap.isOwner).toBe(true);
+    expect(ownerSnap.connectedPlayers).toBe(4);
+    expect(otherSnap.isOwner).toBe(false);
+    expect([...internal.botSeats].sort()).toEqual([2, 3]);
+  });
+
+  it("fillBots após saídas não coloca dois humanos no mesmo assento", async () => {
+    const room = await gameServer.createRoom("truco", { seed: SEED + 8 });
+    const a = await connectWithQueue(gameServer, room, {
+      nickname: "A",
+      clientId: "aaaaaaaa",
+    });
+    const b = await connectWithQueue(gameServer, room, {
+      nickname: "B",
+      clientId: "bbbbbbbb",
+    });
+    await drainJoinMessages(a);
+    await drainJoinMessages(b);
+    await a.raw.leave(true);
+    await b.raw.leave(true);
+    await sleep(100);
+
+    const c = await connectWithQueue(gameServer, room, {
+      nickname: "C",
+      clientId: "cccccccc",
+    });
+    const d = await connectWithQueue(gameServer, room, {
+      nickname: "D",
+      clientId: "dddddddd",
+    });
+    const e = await connectWithQueue(gameServer, room, {
+      nickname: "E",
+      clientId: "eeeeeeee",
+    });
+    await drainJoinMessages(c);
+    await drainJoinMessages(d);
+    await drainJoinMessages(e);
+
+    drainAll(c);
+    c.raw.send("fillBots", {});
+    await sleep(200);
+
+    const internal = room as unknown as TrucoRoomInternal;
+    const seats = [...internal.occupied.values()];
+    expect(new Set(seats).size).toBe(seats.length);
+    expect(internal.occupied.size + internal.botSeats.size).toBe(4);
+
+    drainAll(c);
+    c.raw.send("startGame", {});
+    await sleep(100);
+    expect(internal.status).toBe("playing");
+    const snap = await syncAndWait(c);
+    expect(snap.connectedPlayers).toBe(4);
+  });
 
   it("código da sala é duas palavras", async () => {
     const room = await gameServer.createRoom("truco", { seed: SEED + 7 });

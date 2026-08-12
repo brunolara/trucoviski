@@ -10,3 +10,4 @@ mock-v2/
 .venv/
 data/
 .pi-subagents/
+.pnpm-store/
