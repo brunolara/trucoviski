@@ -283,338 +283,421 @@ export function Mesa() {
           </div>
         </div>
 
-        {/* Board area (circular 2D) */}
-        <div className={styles.board}>
-          <img
-            className={styles.tableDecorationHat}
-            src="/assets/pixel/chapeu.png"
-            alt=""
-            aria-hidden="true"
-          />
-          <img
-            className={styles.tableDecorationGun}
-            src="/assets/pixel/arma.png"
-            alt=""
-            aria-hidden="true"
-          />
-          {/* Table Center */}
-          <div className={styles.tableCenter}>
-            {/* Current plays arranged cross-wise (ou congeladas via tableHold) */}
-            {table && (
-              <div className={styles.playedCardsGrid}>
-                {table.plays.map((c, absSeat) => {
-                  const rel = getRelativeSeat(absSeat);
-                  const isCovered = table.covered[absSeat];
-                  const isWinner =
-                    holdWinner !== undefined && holdWinner === absSeat;
-                  const isDimmed =
-                    holdWinner !== undefined &&
-                    holdWinner !== null &&
-                    holdWinner !== absSeat;
-                  return (
-                    <div
-                      key={absSeat}
-                      className={`${styles.playedCardWrapper} ${styles[`playPos${rel}`]}`}
-                      data-testid={`played-card-${absSeat}`}
-                      data-winner={isWinner ? "true" : undefined}
-                    >
-                      <AnimatePresence mode="wait">
-                        {isCovered ? (
-                          <motion.div
-                            className={`${styles.playedCard} ${isWinner ? styles.playedCardWinner : ""} ${isDimmed ? styles.playedCardDimmed : ""}`}
-                            style={
-                              isWinner
-                                ? {
-                                    outlineColor:
-                                      TEAM_COLORS[seatTeam(absSeat)],
-                                  }
-                                : {}
-                            }
-                            initial={{ scale: 0.5 }}
-                            animate={
-                              tableHold?.sweeping
-                                ? {
-                                    scale: 0.6,
-                                    opacity: 0,
-                                    x: sweepDelta?.x ?? 0,
-                                    y: sweepDelta?.y ?? 0,
-                                  }
-                                : {
-                                    scale: isWinner ? 1.12 : 1,
-                                    opacity: isDimmed ? 0.4 : 1,
-                                    x: 0,
-                                    y: 0,
-                                  }
-                            }
-                            exit={{ scale: 0 }}
-                            transition={
-                              tableHold?.sweeping
-                                ? { type: "tween", duration: 0.28 }
-                                : {
-                                    type: "spring",
-                                    stiffness: 300,
-                                    damping: 20,
-                                  }
-                            }
-                            title="Carta coberta"
-                          >
-                            <Carta covered />
-                          </motion.div>
-                        ) : c ? (
-                          <motion.div
-                            className={`${styles.playedCard} ${isWinner ? styles.playedCardWinner : ""} ${isDimmed ? styles.playedCardDimmed : ""}`}
-                            style={
-                              isWinner
-                                ? {
-                                    outlineColor:
-                                      TEAM_COLORS[seatTeam(absSeat)],
-                                  }
-                                : {}
-                            }
-                            initial={{
-                              scale: 0.5,
-                              y: rel === 0 ? 30 : rel === 2 ? -30 : 0,
-                              x: rel === 3 ? -30 : rel === 1 ? 30 : 0,
-                            }}
-                            animate={
-                              tableHold?.sweeping
-                                ? {
-                                    scale: 0.6,
-                                    opacity: 0,
-                                    x: sweepDelta?.x ?? 0,
-                                    y: sweepDelta?.y ?? 0,
-                                  }
-                                : {
-                                    scale: isWinner ? 1.12 : 1,
-                                    opacity: isDimmed ? 0.4 : 1,
-                                    x: 0,
-                                    y: 0,
-                                  }
-                            }
-                            exit={{ scale: 0 }}
-                            transition={
-                              tableHold?.sweeping
-                                ? { type: "tween", duration: 0.28 }
-                                : {
-                                    type: "spring",
-                                    stiffness: 300,
-                                    damping: 20,
-                                  }
-                            }
-                          >
-                            <Carta
-                              card={c}
-                              manilha={cardIsManilha(c, view.vira)}
-                            />
-                          </motion.div>
-                        ) : (
-                          <div className={styles.playedCardEmpty}>
-                            <span>
-                              {seatName(nicknames, absSeat).slice(0, 3)}
-                            </span>
-                          </div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        {/* Board area (circular 2D). O alerta de truco e os botões de ação
+            flutuam sobre a mesa em vez de empurrar o layout. */}
+        <div className={styles.boardStack}>
+          <div className={styles.board}>
+            <img
+              className={styles.tableDecorationHat}
+              src="/assets/pixel/chapeu.png"
+              alt=""
+              aria-hidden="true"
+            />
+            <img
+              className={styles.tableDecorationGun}
+              src="/assets/pixel/arma.png"
+              alt=""
+              aria-hidden="true"
+            />
+            {/* Table Center */}
+            <div className={styles.tableCenter}>
+              {/* Current plays arranged cross-wise (ou congeladas via tableHold) */}
+              {table && (
+                <div className={styles.playedCardsGrid}>
+                  {table.plays.map((c, absSeat) => {
+                    const rel = getRelativeSeat(absSeat);
+                    const isCovered = table.covered[absSeat];
+                    const isWinner =
+                      holdWinner !== undefined && holdWinner === absSeat;
+                    const isDimmed =
+                      holdWinner !== undefined &&
+                      holdWinner !== null &&
+                      holdWinner !== absSeat;
+                    return (
+                      <div
+                        key={absSeat}
+                        className={`${styles.playedCardWrapper} ${styles[`playPos${rel}`]}`}
+                        data-testid={`played-card-${absSeat}`}
+                        data-winner={isWinner ? "true" : undefined}
+                      >
+                        <AnimatePresence mode="wait">
+                          {isCovered ? (
+                            <motion.div
+                              className={`${styles.playedCard} ${isWinner ? styles.playedCardWinner : ""} ${isDimmed ? styles.playedCardDimmed : ""}`}
+                              style={
+                                isWinner
+                                  ? {
+                                      outlineColor:
+                                        TEAM_COLORS[seatTeam(absSeat)],
+                                    }
+                                  : {}
+                              }
+                              initial={{ scale: 0.5 }}
+                              animate={
+                                tableHold?.sweeping
+                                  ? {
+                                      scale: 0.6,
+                                      opacity: 0,
+                                      x: sweepDelta?.x ?? 0,
+                                      y: sweepDelta?.y ?? 0,
+                                    }
+                                  : {
+                                      scale: isWinner ? 1.12 : 1,
+                                      opacity: isDimmed ? 0.4 : 1,
+                                      x: 0,
+                                      y: 0,
+                                    }
+                              }
+                              exit={{ scale: 0 }}
+                              transition={
+                                tableHold?.sweeping
+                                  ? { type: "tween", duration: 0.28 }
+                                  : {
+                                      type: "spring",
+                                      stiffness: 300,
+                                      damping: 20,
+                                    }
+                              }
+                              title="Carta coberta"
+                            >
+                              <Carta covered />
+                            </motion.div>
+                          ) : c ? (
+                            <motion.div
+                              className={`${styles.playedCard} ${isWinner ? styles.playedCardWinner : ""} ${isDimmed ? styles.playedCardDimmed : ""}`}
+                              style={
+                                isWinner
+                                  ? {
+                                      outlineColor:
+                                        TEAM_COLORS[seatTeam(absSeat)],
+                                    }
+                                  : {}
+                              }
+                              initial={{
+                                scale: 0.5,
+                                y: rel === 0 ? 30 : rel === 2 ? -30 : 0,
+                                x: rel === 3 ? -30 : rel === 1 ? 30 : 0,
+                              }}
+                              animate={
+                                tableHold?.sweeping
+                                  ? {
+                                      scale: 0.6,
+                                      opacity: 0,
+                                      x: sweepDelta?.x ?? 0,
+                                      y: sweepDelta?.y ?? 0,
+                                    }
+                                  : {
+                                      scale: isWinner ? 1.12 : 1,
+                                      opacity: isDimmed ? 0.4 : 1,
+                                      x: 0,
+                                      y: 0,
+                                    }
+                              }
+                              exit={{ scale: 0 }}
+                              transition={
+                                tableHold?.sweeping
+                                  ? { type: "tween", duration: 0.28 }
+                                  : {
+                                      type: "spring",
+                                      stiffness: 300,
+                                      damping: 20,
+                                    }
+                              }
+                            >
+                              <Carta
+                                card={c}
+                                manilha={cardIsManilha(c, view.vira)}
+                              />
+                            </motion.div>
+                          ) : (
+                            <div className={styles.playedCardEmpty}>
+                              <span>
+                                {seatName(nicknames, absSeat).slice(0, 3)}
+                              </span>
+                            </div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-          {/* Players Seats */}
-          {relativeSeatsOrder.map((relSeat) => {
-            const absSeat = ((seat + relSeat) % 4) as Seat;
-            const remainingCards = remainingCardsForSeat(view, absSeat);
-            const pos = SEAT_POSITIONS[relSeat]!;
-            const isTurn =
-              holdWinner !== undefined
-                ? holdWinner === absSeat
-                : turnSeat === absSeat;
-            const name = seatName(nicknames, absSeat);
-            const isMe = relSeat === 0;
+            {/* Players Seats */}
+            {relativeSeatsOrder.map((relSeat) => {
+              const absSeat = ((seat + relSeat) % 4) as Seat;
+              const remainingCards = remainingCardsForSeat(view, absSeat);
+              const pos = SEAT_POSITIONS[relSeat]!;
+              const isTurn =
+                holdWinner !== undefined
+                  ? holdWinner === absSeat
+                  : turnSeat === absSeat;
+              const name = seatName(nicknames, absSeat);
+              const isMe = relSeat === 0;
 
-            // Chat message
-            const chat = chatMessages[absSeat];
-            // Emote
-            const emote = emotes[absSeat];
-            return (
-              <div
-                key={relSeat}
-                className={`${styles.seat} ${styles[`seat${relSeat}`]}`}
-                data-testid={`seat-${absSeat}`}
-                style={{
-                  position: "absolute",
-                  left: pos.left,
-                  top: pos.top,
-                  bottom: pos.bottom,
-                  right: pos.right,
-                  transform:
-                    relSeat === 0 || relSeat === 2
-                      ? "translateX(-50%)"
-                      : "translateY(-50%)",
-                }}
-              >
-                {!isMe && !(relSeat === 2 && view.partnerCards?.length) && (
-                  <div className={styles.seatCardBacks} aria-hidden="true">
-                    {Array.from({ length: remainingCards }, (_, index) => (
-                      <Carta covered key={index} />
-                    ))}
-                  </div>
-                )}
-                {/* Avatar circle */}
+              // Chat message
+              const chat = chatMessages[absSeat];
+              // Emote
+              const emote = emotes[absSeat];
+              return (
                 <div
-                  className={`${styles.avatar} ${isTurn ? styles.activeAvatar : ""} ${
-                    (
-                      holdWinner !== undefined
-                        ? holdWinner !== null && !isTurn
-                        : turnSeat !== null && !isTurn
-                    )
-                      ? styles.dimmedAvatar
-                      : ""
-                  }`}
-                  style={{ borderColor: TEAM_COLORS[seatTeam(absSeat)] }}
+                  key={relSeat}
+                  className={`${styles.seat} ${styles[`seat${relSeat}`]}`}
+                  data-testid={`seat-${absSeat}`}
+                  style={{
+                    position: "absolute",
+                    left: pos.left,
+                    top: pos.top,
+                    bottom: pos.bottom,
+                    right: pos.right,
+                    transform:
+                      relSeat === 0 || relSeat === 2
+                        ? "translateX(-50%)"
+                        : "translateY(-50%)",
+                  }}
                 >
-                  <span className={styles.avatarLabel}>{AVATARS[absSeat]}</span>
-                  {/* 🍅 button for others */}
-                  {!isMe && (
-                    <button
-                      className={styles.tomatoBtn}
-                      onClick={() => throwTomato(absSeat)}
-                      title={`Jogar tomate em ${name}`}
-                      data-testid={`tomato-btn-${absSeat}`}
-                    >
-                      🍅
-                    </button>
-                  )}
-                </div>
-
-                {/* Player nickname */}
-                <div className={styles.seatName}>
-                  {name} {isMe && "(Você)"}
-                </div>
-
-                {/* Chat bubble */}
-                <AnimatePresence>
-                  {chat && (
-                    <motion.div
-                      className={styles.chatBubble}
-                      data-testid={`chat-bubble-${absSeat}`}
-                      initial={{ opacity: 0, scale: 0.7 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.7 }}
-                    >
-                      {chat.text}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Emote display */}
-                <AnimatePresence>
-                  {emote && (
-                    <motion.div
-                      className={styles.emoteBubble}
-                      data-testid={`emote-bubble-${absSeat}`}
-                      initial={{ opacity: 0, y: 10, scale: 0.5 }}
-                      animate={{ opacity: 1, y: -20, scale: 1.5 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 200,
-                        damping: 10,
-                      }}
-                    >
-                      {emote.emoji}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Partner Cards display on top seat (Seat 2) if in Mão de Onze */}
-                {relSeat === 2 &&
-                  view.partnerCards &&
-                  view.partnerCards.length > 0 && (
-                    <div className={styles.partnerCardsContainer}>
-                      {view.partnerCards.map((pc, idx) => (
-                        <div key={idx} className={styles.partnerMiniCard}>
-                          <Carta
-                            card={pc}
-                            manilha={cardIsManilha(pc, view.vira)}
-                          />
-                        </div>
+                  {!isMe && !(relSeat === 2 && view.partnerCards?.length) && (
+                    <div className={styles.seatCardBacks} aria-hidden="true">
+                      {Array.from({ length: remainingCards }, (_, index) => (
+                        <Carta covered key={index} />
                       ))}
                     </div>
                   )}
-              </div>
-            );
-          })}
+                  {/* Avatar circle */}
+                  <div
+                    className={`${styles.avatar} ${isTurn ? styles.activeAvatar : ""} ${
+                      (
+                        holdWinner !== undefined
+                          ? holdWinner !== null && !isTurn
+                          : turnSeat !== null && !isTurn
+                      )
+                        ? styles.dimmedAvatar
+                        : ""
+                    }`}
+                    style={{ borderColor: TEAM_COLORS[seatTeam(absSeat)] }}
+                  >
+                    <span className={styles.avatarLabel}>
+                      {AVATARS[absSeat]}
+                    </span>
+                    {/* 🍅 button for others */}
+                    {!isMe && (
+                      <button
+                        className={styles.tomatoBtn}
+                        onClick={() => throwTomato(absSeat)}
+                        title={`Jogar tomate em ${name}`}
+                        data-testid={`tomato-btn-${absSeat}`}
+                      >
+                        🍅
+                      </button>
+                    )}
+                  </div>
 
-          {/* Flying Tomatoes */}
-          {activeTomato &&
-            (() => {
-              const fromRel = getRelativeSeat(activeTomato.senderSeat);
-              const toRel = getRelativeSeat(activeTomato.targetSeat);
-              const fromPos = SEAT_POSITIONS[fromRel]!;
-              const toPos = SEAT_POSITIONS[toRel]!;
+                  {/* Player nickname */}
+                  <div className={styles.seatName}>
+                    {name} {isMe && "(Você)"}
+                  </div>
 
-              return (
-                <motion.div
-                  className={styles.tomatoEffect}
-                  data-testid="tomato-effect"
-                  initial={{
-                    left: fromPos.left || "auto",
-                    top: fromPos.top || "auto",
-                    bottom: fromPos.bottom || "auto",
-                    right: fromPos.right || "auto",
-                    scale: 0.8,
-                    x: fromRel === 0 || fromRel === 2 ? "-50%" : "0%",
-                    y: fromRel === 1 || fromRel === 3 ? "-50%" : "0%",
-                  }}
-                  animate={
-                    activeTomato.phase === "flying"
-                      ? {
-                          left: toPos.left || "auto",
-                          top: toPos.top || "auto",
-                          bottom: toPos.bottom || "auto",
-                          right: toPos.right || "auto",
-                          scale: 1.3,
-                          x: toRel === 0 || toRel === 2 ? "-50%" : "0%",
-                          y: toRel === 1 || toRel === 3 ? "-50%" : "0%",
-                        }
-                      : {
-                          left: toPos.left || "auto",
-                          top: toPos.top || "auto",
-                          bottom: toPos.bottom || "auto",
-                          right: toPos.right || "auto",
-                          scale: [1, 2.2, 1.4],
-                          rotate: [0, 20, -20, 0],
-                          x: toRel === 0 || toRel === 2 ? "-50%" : "0%",
-                          y: toRel === 1 || toRel === 3 ? "-50%" : "0%",
-                        }
-                  }
-                  transition={{
-                    duration: activeTomato.phase === "flying" ? 0.5 : 0.2,
-                  }}
-                >
-                  {activeTomato.phase === "flying" ? "🍅" : "💥🍅💦"}
-                </motion.div>
+                  {/* Chat bubble */}
+                  <AnimatePresence>
+                    {chat && (
+                      <motion.div
+                        className={styles.chatBubble}
+                        data-testid={`chat-bubble-${absSeat}`}
+                        initial={{ opacity: 0, scale: 0.7 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.7 }}
+                      >
+                        {chat.text}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Emote display */}
+                  <AnimatePresence>
+                    {emote && (
+                      <motion.div
+                        className={styles.emoteBubble}
+                        data-testid={`emote-bubble-${absSeat}`}
+                        initial={{ opacity: 0, y: 10, scale: 0.5 }}
+                        animate={{ opacity: 1, y: -20, scale: 1.5 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 200,
+                          damping: 10,
+                        }}
+                      >
+                        {emote.emoji}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Partner Cards display on top seat (Seat 2) if in Mão de Onze */}
+                  {relSeat === 2 &&
+                    view.partnerCards &&
+                    view.partnerCards.length > 0 && (
+                      <div className={styles.partnerCardsContainer}>
+                        {view.partnerCards.map((pc, idx) => (
+                          <div key={idx} className={styles.partnerMiniCard}>
+                            <Carta
+                              card={pc}
+                              manilha={cardIsManilha(pc, view.vira)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </div>
               );
-            })()}
+            })}
+
+            {/* Flying Tomatoes */}
+            {activeTomato &&
+              (() => {
+                const fromRel = getRelativeSeat(activeTomato.senderSeat);
+                const toRel = getRelativeSeat(activeTomato.targetSeat);
+                const fromPos = SEAT_POSITIONS[fromRel]!;
+                const toPos = SEAT_POSITIONS[toRel]!;
+
+                return (
+                  <motion.div
+                    className={styles.tomatoEffect}
+                    data-testid="tomato-effect"
+                    initial={{
+                      left: fromPos.left || "auto",
+                      top: fromPos.top || "auto",
+                      bottom: fromPos.bottom || "auto",
+                      right: fromPos.right || "auto",
+                      scale: 0.8,
+                      x: fromRel === 0 || fromRel === 2 ? "-50%" : "0%",
+                      y: fromRel === 1 || fromRel === 3 ? "-50%" : "0%",
+                    }}
+                    animate={
+                      activeTomato.phase === "flying"
+                        ? {
+                            left: toPos.left || "auto",
+                            top: toPos.top || "auto",
+                            bottom: toPos.bottom || "auto",
+                            right: toPos.right || "auto",
+                            scale: 1.3,
+                            x: toRel === 0 || toRel === 2 ? "-50%" : "0%",
+                            y: toRel === 1 || toRel === 3 ? "-50%" : "0%",
+                          }
+                        : {
+                            left: toPos.left || "auto",
+                            top: toPos.top || "auto",
+                            bottom: toPos.bottom || "auto",
+                            right: toPos.right || "auto",
+                            scale: [1, 2.2, 1.4],
+                            rotate: [0, 20, -20, 0],
+                            x: toRel === 0 || toRel === 2 ? "-50%" : "0%",
+                            y: toRel === 1 || toRel === 3 ? "-50%" : "0%",
+                          }
+                    }
+                    transition={{
+                      duration: activeTomato.phase === "flying" ? 0.5 : 0.2,
+                    }}
+                  >
+                    {activeTomato.phase === "flying" ? "🍅" : "💥🍅💦"}
+                  </motion.div>
+                );
+              })()}
+          </div>
+
+          {/* Truco pendente: sobreposto ao topo da mesa */}
+          {view.trucoPendingTeam !== null && (
+            <div
+              className={styles.trucoAlert}
+              style={{
+                borderColor: TEAM_COLORS[view.trucoPendingTeam],
+                color: TEAM_COLORS[view.trucoPendingTeam],
+              }}
+            >
+              {view.trucoPendingTeam === myTeam
+                ? `Seu time pediu ${view.trucoPendingValue}!`
+                : `Oponentes pediram ${view.trucoPendingValue}!`}
+            </div>
+          )}
+
+          {/* Ações da mão: sobrepostas à base da mesa */}
+          <div className={styles.gameActions}>
+            {elevenDecisions.length > 0 && (
+              <div
+                className={styles.elevenBox}
+                data-testid="eleven-decision-box"
+              >
+                <p className={styles.elevenText}>Mão de Onze! Decida:</p>
+                <div className={styles.elevenBtns}>
+                  {elevenDecisions.map((a) => (
+                    <button
+                      key={a.decision}
+                      className={
+                        a.decision === "play" ? styles.playBtn : styles.runBtn
+                      }
+                      onClick={() => dispatchAction(a)}
+                      data-testid={
+                        a.decision === "play"
+                          ? "eleven-play-btn"
+                          : "eleven-run-btn"
+                      }
+                    >
+                      {a.decision === "play" ? "Jogar (vale 3)" : "Correr (+1)"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {isMyTurn && legalTrucoActions.length > 0 && (
+              <div className={styles.actionArea} data-testid="action-area">
+                <div className={styles.trucoActions}>
+                  {legalTrucoActions.map((a, i) => {
+                    const trucoAction = (a as { action: string }).action;
+                    let label: string = trucoAction;
+                    if (trucoAction === "raise") {
+                      const base = view.trucoPendingValue ?? view.trucoValue;
+                      const next = NEXT_TRUCO_VALUE[base];
+                      label = next
+                        ? (TRUCO_RAISE_LABEL[next] ?? "Truco!")
+                        : "Truco!";
+                    }
+                    if (trucoAction === "accept") {
+                      label = `Aceitar (vale ${view.trucoPendingValue})`;
+                    }
+                    if (trucoAction === "run") label = "Correr";
+                    return (
+                      <button
+                        key={i}
+                        className={
+                          trucoAction === "raise"
+                            ? styles.trucoBtn
+                            : trucoAction === "accept"
+                              ? styles.acceptBtn
+                              : styles.runBtn
+                        }
+                        onClick={() => dispatchAction(a)}
+                        data-testid={`truco-${trucoAction}-btn`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Truco pending alert */}
-        {view.trucoPendingTeam !== null && (
-          <div
-            className={styles.trucoAlert}
-            style={{
-              borderColor: TEAM_COLORS[view.trucoPendingTeam],
-              color: TEAM_COLORS[view.trucoPendingTeam],
-            }}
-          >
-            {view.trucoPendingTeam === myTeam
-              ? `Seu time pediu ${view.trucoPendingValue}!`
-              : `Oponentes pediram ${view.trucoPendingValue}!`}
-          </div>
-        )}
+        {/* Faixa de status: altura fixa para a mesa não mudar de tamanho */}
+        <div className={styles.statusStrip}>
+          {turnSeat !== null && (
+            <p className={styles.turnIndicatorText}>
+              {turnSeat === seat
+                ? "▶ SUA VEZ DE JOGAR!"
+                : `Vez de: ${seatName(nicknames, turnSeat)}`}
+            </p>
+          )}
+        </div>
 
         {/* Presentation banner (pacing) */}
         <AnimatePresence>
@@ -665,15 +748,6 @@ export function Mesa() {
             </div>
           ))}
         </div>
-
-        {/* Turn indicator text */}
-        {turnSeat !== null && (
-          <p className={styles.turnIndicatorText}>
-            {turnSeat === seat
-              ? "Sua vez de jogar!"
-              : `Vez de: ${seatName(nicknames, turnSeat)}`}
-          </p>
-        )}
 
         {/* Hand Area (Your Cards) */}
         <div
@@ -802,74 +876,6 @@ export function Mesa() {
         </div>
 
         <div className={styles.bottomBar}>
-          <div className={styles.gameActions}>
-            {elevenDecisions.length > 0 && (
-              <div
-                className={styles.elevenBox}
-                data-testid="eleven-decision-box"
-              >
-                <p className={styles.elevenText}>Mão de Onze! Decida:</p>
-                <div className={styles.elevenBtns}>
-                  {elevenDecisions.map((a) => (
-                    <button
-                      key={a.decision}
-                      className={
-                        a.decision === "play" ? styles.playBtn : styles.runBtn
-                      }
-                      onClick={() => dispatchAction(a)}
-                      data-testid={
-                        a.decision === "play"
-                          ? "eleven-play-btn"
-                          : "eleven-run-btn"
-                      }
-                    >
-                      {a.decision === "play" ? "Jogar (vale 3)" : "Correr (+1)"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {isMyTurn && (
-              <div className={styles.actionArea} data-testid="action-area">
-                {legalTrucoActions.length > 0 && (
-                  <div className={styles.trucoActions}>
-                    {legalTrucoActions.map((a, i) => {
-                      const trucoAction = (a as { action: string }).action;
-                      let label: string = trucoAction;
-                      if (trucoAction === "raise") {
-                        const base = view.trucoPendingValue ?? view.trucoValue;
-                        const next = NEXT_TRUCO_VALUE[base];
-                        label = next
-                          ? (TRUCO_RAISE_LABEL[next] ?? "Truco!")
-                          : "Truco!";
-                      }
-                      if (trucoAction === "accept") {
-                        label = `Aceitar (vale ${view.trucoPendingValue})`;
-                      }
-                      if (trucoAction === "run") label = "Correr";
-                      return (
-                        <button
-                          key={i}
-                          className={
-                            trucoAction === "raise"
-                              ? styles.trucoBtn
-                              : trucoAction === "accept"
-                                ? styles.acceptBtn
-                                : styles.runBtn
-                          }
-                          onClick={() => dispatchAction(a)}
-                          data-testid={`truco-${trucoAction}-btn`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
           <div className={styles.footer}>
             <button
               type="button"

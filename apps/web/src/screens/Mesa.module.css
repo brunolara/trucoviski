@@ -45,17 +45,19 @@
   );
 }
 
+/* 3 colunas: placar à esquerda, vira no centro (3ª coluna fica vazia). */
 .topBar {
   z-index: 3;
-  display: flex;
+  display: grid;
   flex: none;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 26px 18px 8px;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 22px 18px 6px;
 }
 
 .scores {
   display: flex;
+  justify-self: start;
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
@@ -104,31 +106,46 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  padding: 3px 9px 5px;
+  background: #20120a;
+  border: 3px solid #caa23a;
+  box-shadow:
+    0 3px 0 #120a05,
+    inset 0 0 10px rgb(0 0 0 / 60%);
   font-family: "Press Start 2P", monospace;
-  font-size: 7px;
+  font-size: 9px;
   color: #f4d06a;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .viraCard {
-  width: 44px;
-  height: 62px;
-  --card-rank-size: 14px;
-  --card-suit-size: 22px;
+  width: 50px;
+  height: 70px;
+  --card-rank-size: 15px;
+  --card-suit-size: 25px;
   --card-border-width: 3px;
-  --card-padding: 4px;
+  --card-padding: 5px;
   --card-radius: 4px;
-  filter: drop-shadow(0 3px 0 rgb(0 0 0 / 40%));
+  filter: drop-shadow(0 3px 0 rgb(0 0 0 / 40%))
+    drop-shadow(0 0 8px rgb(244 208 106 / 55%));
+}
+
+/* A mesa ocupa toda a área livre; alerta de truco e botões de ação são
+   sobrepostos (position: absolute) para não roubarem altura dela. */
+.boardStack {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 0;
+  min-height: 280px;
+  margin: 8px 16px;
 }
 
 .board {
-  position: relative;
+  position: absolute;
   z-index: 2;
+  inset: 0;
   display: flex;
-  flex: 1 1 0;
-  min-height: 280px;
-  margin: 8px 16px 8px;
   overflow: hidden;
   border: 10px solid #3a2314;
   border-radius: 40px;
@@ -179,8 +196,10 @@
   left: 10px !important;
 }
 
+/* z-index acima do miolo da mesa (6): o avatar nunca fica coberto por carta */
 .avatar {
   position: relative;
+  z-index: 7;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -196,17 +215,26 @@
   line-height: 1;
 }
 .activeAvatar {
+  border-color: #2de2e6 !important;
+  transform: scale(1.25);
   animation: turnPulse 1.1s ease-in-out infinite;
 }
+/* nome de quem joga agora também acende */
+.seat:has(.activeAvatar) .seatName {
+  color: #2de2e6;
+  text-shadow: 0 0 6px rgb(45 226 230 / 70%);
+}
 .dimmedAvatar {
-  opacity: 0.6;
+  opacity: 0.45;
 }
 @keyframes turnPulse {
   50% {
-    box-shadow: 0 0 12px 3px #2de2e6;
+    box-shadow: 0 0 14px 5px #2de2e6;
   }
 }
 .seatName {
+  position: relative;
+  z-index: 7;
   margin-top: 3px;
   color: #f4e8c8;
   font-family: "Press Start 2P", monospace;
@@ -235,8 +263,8 @@
   box-shadow: 0 3px 0 rgb(0 0 0 / 35%);
 }
 .seat2 .seatCardBacks > * {
-  width: 50px;
-  height: 70px;
+  width: 44px;
+  height: 62px;
   margin-left: -16px;
 }
 .seat2 .seatCardBacks > *:first-child {
@@ -248,6 +276,7 @@
 .seat1 .seatCardBacks,
 .seat3 .seatCardBacks {
   flex-direction: column;
+  margin-bottom: 6px;
 }
 .seat1 .seatCardBacks > *,
 .seat3 .seatCardBacks > * {
@@ -303,13 +332,15 @@
   pointer-events: none;
 }
 
+/* 250px de largura: é o máximo que passa entre os assentos laterais
+   (10px + 46px de carta de cada lado) sem cobri-los. */
 .tableCenter {
   position: absolute;
   z-index: 6;
-  top: 52%;
+  top: 50%;
   left: 50%;
   width: 250px;
-  height: 210px;
+  height: 220px;
   transform: translate(-50%, -50%);
 }
 .playedCardsGrid {
@@ -320,8 +351,8 @@
 }
 .playedCardWrapper {
   position: absolute;
-  width: 56px;
-  height: 78px;
+  width: 66px;
+  height: 92px;
 }
 .playPos0 {
   bottom: 0;
@@ -346,8 +377,8 @@
 .playedCard {
   width: 100%;
   height: 100%;
-  --card-rank-size: 14px;
-  --card-suit-size: 25px;
+  --card-rank-size: 16px;
+  --card-suit-size: 30px;
   --card-border-width: 2px;
   --card-padding: 5px;
   --card-radius: 4px;
@@ -378,6 +409,18 @@
   pointer-events: none;
 }
 
+/* Altura fixa: a mesa só fica estável se todos os irmãos dela tiverem
+   altura constante, apareçam eles ou não. */
+.statusStrip {
+  z-index: 3;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 18px;
+}
+
 .trucoAlert,
 .presentationBanner,
 .vazasArea {
@@ -388,6 +431,22 @@
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
   text-align: center;
+}
+.trucoAlert {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  left: 12px;
+  z-index: 8;
+  width: auto;
+  font-size: 12px;
+  line-height: 1.2;
+  animation: trucoPulse 0.9s ease-in-out infinite;
+}
+@keyframes trucoPulse {
+  50% {
+    box-shadow: 0 0 14px 2px currentcolor;
+  }
 }
 .trucoAlert,
 .presentationBanner {
@@ -429,10 +488,13 @@
 
 .turnIndicatorText {
   z-index: 3;
-  margin: 2px 0 6px;
+  padding: 5px 12px;
   color: #2de2e6;
+  border: 2px solid currentcolor;
+  border-radius: 4px;
+  background: #10201f;
   font-family: "Press Start 2P", monospace;
-  font-size: 11px;
+  font-size: 13px;
   text-align: center;
   text-shadow: 0 0 8px rgb(45 226 230 / 80%);
   animation: turnBlink 1.1s infinite;
@@ -442,9 +504,10 @@
     opacity: 0.35;
   }
 }
+/* compacto para caber na altura fixa de .gameActions */
 .elevenBox {
   width: 100%;
-  padding: 7px;
+  padding: 4px;
   color: #f4d06a;
   border: 2px solid #7be89a;
   border-radius: 4px;
@@ -454,12 +517,17 @@
   text-align: center;
 }
 .elevenText {
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 .elevenBtns {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+.elevenBtns .playBtn,
+.elevenBtns .runBtn {
+  min-height: 40px;
+  font-size: 10px;
 }
 
 .handArea {
@@ -470,7 +538,10 @@
   align-items: center;
   padding: 0 18px 5px;
 }
-.handAreaActive .hand {
+/* o brilho vai nas cartas, não na caixa da mão: a caixa tem altura fixa
+   (reserva do botão "virar coberta") e sobraria um vão iluminado embaixo */
+.handAreaActive .handCard,
+.handAreaActive .ferroCard {
   animation: pulseGlowCyan 1.6s infinite;
 }
 @keyframes pulseGlowCyan {
@@ -485,10 +556,12 @@
   font-family: "Press Start 2P", monospace;
   font-size: 8px;
 }
+/* altura fixa: reserva o espaço do botão "virar coberta" (só existe na sua vez) */
 .hand {
   display: flex;
   gap: 10px;
-  min-height: 136px;
+  align-items: flex-start;
+  height: 164px;
   padding: 5px;
   border-radius: 8px;
 }
@@ -555,20 +628,48 @@
   width: 100%;
   padding: 0 12px calc(8px + env(safe-area-inset-bottom, 0px));
 }
+/* Encaixa na base da mesa: mesmo raio interno da borda (40px - 10px de
+   borda = 30px), colado nos 10px da moldura. */
 .gameActions {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  z-index: 9;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 6px;
-  min-height: 52px;
+  overflow: hidden;
+  border-radius: 0 0 30px 30px;
+}
+.gameActions:not(:empty) {
+  padding: 10px;
+  background: linear-gradient(transparent, rgb(7 32 21 / 85%) 40%);
+}
+/* elementos das pontas acompanham a curva da mesa */
+.trucoActions > :first-child {
+  border-bottom-left-radius: 20px;
+}
+.trucoActions > :last-child {
+  border-bottom-right-radius: 20px;
+}
+.elevenBox {
+  border-bottom-right-radius: 20px;
+  border-bottom-left-radius: 20px;
 }
 .actionArea {
   width: 100%;
 }
+/* 2 ou 3 botões (aceitar/correr/aumentar) sempre em uma única linha */
 .trucoActions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 8px;
+}
+.trucoActions button {
+  font-size: 10px;
 }
 .trucoBtn,
 .acceptBtn,
