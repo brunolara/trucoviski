@@ -428,6 +428,15 @@ function executePlayCard(
 
 // ---- Truco ----------------------------------------------------------
 
+/**
+ * Quem responde ao truco pendente: o jogador da vez, ou o seguinte na ordem
+ * quando a vez é de quem pediu. Alterna entre esses dois a cada contra-aumento.
+ */
+function trucoResponder(h: MutableHandState): Seat {
+  const turn = h.currentVaza ? h.currentVaza.currentSeat : h.nextStarter;
+  return (TEAMS[turn] === h.trucoPendingTeam ? (turn + 1) % 4 : turn) as Seat;
+}
+
 function doTruco(
   m: Internal,
   h: MutableHandState,
@@ -446,6 +455,9 @@ function doTruco(
       if (h.trucoPendingTeam === TEAMS[seat]) {
         return { success: false, error: "cannotRaiseYourOwnTruco" };
       }
+      if (trucoResponder(h) !== seat) {
+        return { success: false, error: "notYourTurn" };
+      }
       const nextVal = nextTrucoLevel(h.trucoPendingValue!, m.ruleset);
       if (nextVal > maxVal || nextVal === h.trucoPendingValue) {
         return { success: false, error: "maxTrucoValue" };
@@ -458,12 +470,18 @@ function doTruco(
       };
     }
 
-    // Novo truco: alterna entre times
-    if (h.trucoLastRaiser !== null && h.trucoLastRaiser === TEAMS[seat]) {
-      return { success: false, error: "cannotRaiseYourOwnTruco" };
-    }
+    // Novo truco
     if (h.trucoValue >= maxVal) {
       return { success: false, error: "maxTrucoValue" };
+    }
+    // Só quem está na vez pode pedir.
+    const whoseTurn = h.currentVaza ? h.currentVaza.currentSeat : h.nextStarter;
+    if (whoseTurn !== seat) {
+      return { success: false, error: "notYourTurn" };
+    }
+    // Alterna entre times.
+    if (h.trucoLastRaiser !== null && h.trucoLastRaiser === TEAMS[seat]) {
+      return { success: false, error: "cannotRaiseYourOwnTruco" };
     }
     const nextVal = nextTrucoLevel(h.trucoValue, m.ruleset);
     h.trucoPendingValue = nextVal;
@@ -481,6 +499,10 @@ function doTruco(
 
   if (h.trucoPendingTeam === TEAMS[seat]) {
     return { success: false, error: "cannotRaiseYourOwnTruco" };
+  }
+
+  if (trucoResponder(h) !== seat) {
+    return { success: false, error: "notYourTurn" };
   }
 
   if (trucoAction === "accept") {
@@ -645,7 +667,7 @@ function computeLegalActions(
 
   // Truco pendente → respostas do time oposto
   if (h.trucoPendingTeam !== null) {
-    if (h.trucoPendingTeam !== TEAMS[seat]) {
+    if (h.trucoPendingTeam !== TEAMS[seat] && trucoResponder(h) === seat) {
       actions.push(
         { type: "truco", action: "accept" },
         { type: "truco", action: "run" },
@@ -658,6 +680,10 @@ function computeLegalActions(
     }
     return actions;
   }
+
+  const isMyTurn = h.currentVaza
+    ? h.currentVaza.currentSeat === seat
+    : h.nextStarter === seat;
 
   // Jogar carta (se for a vez, ou se for o próximo a abrir vaza)
   if (h.isFerro) {
@@ -674,9 +700,6 @@ function computeLegalActions(
       }
     }
   } else {
-    const isMyTurn = h.currentVaza
-      ? h.currentVaza.currentSeat === seat
-      : h.nextStarter === seat;
     if (isMyTurn) {
       for (const card of h.cards[seat]) {
         actions.push({ type: "playCard", card });
@@ -690,8 +713,8 @@ function computeLegalActions(
     }
   }
 
-  // Iniciar truco (se permitido)
-  if (!h.isElevenHand && !h.isFerro) {
+  // Iniciar truco: só na sua vez, antes de jogar a carta.
+  if (isMyTurn && !h.isElevenHand && !h.isFerro) {
     if (
       h.trucoValue < lastTrucoLevel(m.ruleset) &&
       h.trucoLastRaiser !== TEAMS[seat]

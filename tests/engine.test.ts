@@ -72,6 +72,16 @@ function trucoAccept(match: ReturnType<typeof createMatch>, seat: Seat) {
   return r.events;
 }
 
+/** Joga a primeira carta legal do assento da vez, passando a vez adiante. */
+function playTurn(match: ReturnType<typeof createMatch>, seat: Seat) {
+  const action = match
+    .playerView(seat)
+    .legalActions.find((a) => a.type === "playCard");
+  if (!action) throw new Error(`seat ${seat} has no playCard action`);
+  const r = match.dispatch(seat, action);
+  if (!r.success) throw new Error(`playCard failed: ${r.error}`);
+}
+
 /** Corre do truco. */
 function trucoRun(match: ReturnType<typeof createMatch>, seat: Seat) {
   const r = match.dispatch(seat, { type: "truco", action: "run" });
@@ -492,7 +502,11 @@ describe("truco", () => {
     expect(r.success).toBe(false);
     expect(r.error).toBe("cannotRaiseYourOwnTruco");
 
-    // Team 1 can raise
+    // Team 1 can raise — mas só quando chegar a vez dele
+    expect(match.dispatch(1, { type: "truco", action: "raise" }).error).toBe(
+      "notYourTurn",
+    );
+    playTurn(match, 0);
     const r2 = match.dispatch(1, { type: "truco", action: "raise" });
     expect(r2.success).toBe(true);
   });
@@ -892,13 +906,17 @@ describe("coverage extras", () => {
   it("cannot raise new truco when already at 12", () => {
     const match = createMatch(paulista, 42);
     // Accept a truco up to 12
+    // Cada novo pedido vem de quem está na vez, então avança-se a vaza.
     trucoRaise(match, 0); // 1→3 pending
     trucoAccept(match, 1); // accepted at 3
+    playTurn(match, 0);
     trucoRaise(match, 1); // 3→6 pending
-    trucoAccept(match, 0); // accepted at 6
-    trucoRaise(match, 0); // 6→9 pending
-    trucoAccept(match, 1); // accepted at 9
-    trucoRaise(match, 1); // 9→12 pending
+    trucoAccept(match, 2); // accepted at 6
+    playTurn(match, 1);
+    trucoRaise(match, 2); // 6→9 pending
+    trucoAccept(match, 3); // accepted at 9
+    playTurn(match, 2);
+    trucoRaise(match, 3); // 9→12 pending
     trucoAccept(match, 0); // accepted at 12
 
     // Now try to start a new truco at 12

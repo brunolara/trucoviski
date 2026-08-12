@@ -605,8 +605,9 @@ export function Mesa() {
               })()}
           </div>
 
-          {/* Truco pendente: sobreposto ao topo da mesa */}
-          {view.trucoPendingTeam !== null && (
+          {/* Truco pendente: sobreposto ao topo da mesa. O banner de
+              apresentação já narra o pedido — não duplicar enquanto ele existe. */}
+          {view.trucoPendingTeam !== null && !banner && (
             <div
               className={styles.trucoAlert}
               style={{
