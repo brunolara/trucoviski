@@ -183,6 +183,10 @@
 .seat2 {
   top: 14px !important;
 }
+.seat1,
+.seat3 {
+  width: 46px;
+}
 .seat1 {
   right: 10px !important;
 }
@@ -190,23 +194,37 @@
   left: 10px !important;
 }
 
-/* z-index acima do miolo da mesa (6): o avatar nunca fica coberto por carta */
-.avatar {
+.avatarWrap {
   position: relative;
   z-index: 7;
+  flex: none;
+}
+
+/* z-index acima do miolo da mesa (6): o avatar nunca fica coberto por carta */
+.avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  overflow: hidden;
   border: 2px solid #caa23a !important;
   border-radius: 50%;
   background: #20120a;
   box-shadow: 0 2px 0 #120a05;
 }
-.avatarLabel {
-  font-size: 16px;
-  line-height: 1;
+.avatarImg {
+  display: block;
+  width: 40px;
+  height: 40px;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  object-fit: cover;
+  image-rendering: pixelated;
 }
 .activeAvatar {
   border-color: #2de2e6 !important;
@@ -217,9 +235,6 @@
 .seat:has(.activeAvatar) .seatName {
   color: #2de2e6;
   text-shadow: 0 0 6px rgb(45 226 230 / 70%);
-}
-.dimmedAvatar {
-  opacity: 0.45;
 }
 @keyframes turnPulse {
   50% {
@@ -242,7 +257,7 @@
 }
 .seat1 .seatName,
 .seat3 .seatName {
-  max-width: 72px;
+  max-width: 100%;
   overflow: hidden;
   font-size: 8px;
   text-align: center;

@@ -1,4 +1,5 @@
 import { pickRandomPlayerName } from "@trucoviski/shared";
+import { PlayerAvatar } from "../components/PlayerAvatar.js";
 import { useStore } from "../store.js";
 import styles from "./Home.module.css";
 
@@ -27,6 +28,15 @@ export function Home() {
     <div className={styles.screen} data-testid="home-screen">
       <div className={styles.card}>
         <h1 className={styles.title}>Truco Paulista</h1>
+
+        <div className={styles.avatarPreview}>
+          <PlayerAvatar
+            seed={nickname}
+            alt="Sua foto de perfil"
+            size={96}
+            className={styles.avatarImg}
+          />
+        </div>
 
         <label className={styles.label} htmlFor="nickname-input">
           Seu nome

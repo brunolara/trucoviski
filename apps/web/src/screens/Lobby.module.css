@@ -138,6 +138,26 @@
   min-width: 28px;
 }
 
+.seatAvatar {
+  display: block;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #20120a;
+  image-rendering: pixelated;
+}
+
+.seatAvatarEmpty {
+  display: block;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.2);
+}
+
 .seatName {
   flex: 1;
   text-align: left;

@@ -5,6 +5,7 @@ import type { Card, Seat } from "@trucoviski/shared";
 import { EMOJI_WHITELIST } from "@trucoviski/shared";
 import { motion, AnimatePresence } from "framer-motion";
 import { Carta } from "../components/mesa/Carta.js";
+import { PlayerAvatar } from "../components/PlayerAvatar.js";
 import { cardIsManilha, logLines, seatName } from "../utils/historico.js";
 import { remainingCardsForSeat } from "../utils/mesa.js";
 import styles from "./Mesa.module.css";
@@ -43,8 +44,6 @@ const TRUCO_RAISE_LABEL: Record<number, string> = {
 };
 
 const TRUCO_BTN_ORDER: Record<string, number> = { raise: 0, run: 1, accept: 2 };
-
-const AVATARS = ["🤠", "👵", "🧔", "👩‍🌾"];
 
 const SEAT_POSITIONS = [
   { left: "50%", bottom: "4%" }, // Seat 0 (bottom) - Me
@@ -490,6 +489,7 @@ export function Mesa() {
                   key={relSeat}
                   className={`${styles.seat} ${styles[`seat${relSeat}`]}`}
                   data-testid={`seat-${absSeat}`}
+                  data-rel-seat={relSeat}
                   style={{
                     position: "absolute",
                     left: pos.left,
@@ -503,32 +503,32 @@ export function Mesa() {
                   }}
                 >
                   {!isMe && !(relSeat === 2 && view.partnerCards?.length) && (
-                    <div className={styles.seatCardBacks} aria-hidden="true">
+                    <div
+                      className={styles.seatCardBacks}
+                      aria-hidden="true"
+                      data-testid="seat-card-backs"
+                    >
                       {Array.from({ length: remainingCards }, (_, index) => (
                         <Carta covered key={index} />
                       ))}
                     </div>
                   )}
-                  {/* Avatar circle */}
-                  <div
-                    ref={(el) => {
-                      avatarRefs.current[relSeat] = el;
-                    }}
-                    className={`${styles.avatar} ${isTurn ? styles.activeAvatar : ""} ${
-                      (
-                        holdWinner !== undefined
-                          ? holdWinner !== null && !isTurn
-                          : turnSeat !== null && !isTurn
-                      )
-                        ? styles.dimmedAvatar
-                        : ""
-                    }`}
-                    style={{ borderColor: TEAM_COLORS[seatTeam(absSeat)] }}
-                  >
-                    <span className={styles.avatarLabel}>
-                      {AVATARS[absSeat]}
-                    </span>
-                    {/* 🍅 button for others */}
+                  {/* Avatar circle — o tomate fica fora do overflow do retrato */}
+                  <div className={styles.avatarWrap}>
+                    <div
+                      ref={(el) => {
+                        avatarRefs.current[relSeat] = el;
+                      }}
+                      className={`${styles.avatar} ${isTurn ? styles.activeAvatar : ""}`}
+                      style={{ borderColor: TEAM_COLORS[seatTeam(absSeat)] }}
+                    >
+                      <PlayerAvatar
+                        seed={name}
+                        alt=""
+                        size={64}
+                        className={styles.avatarImg}
+                      />
+                    </div>
                     {!isMe && (
                       <button
                         className={styles.tomatoBtn}
