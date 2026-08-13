@@ -892,6 +892,7 @@ export function Mesa() {
                       bottom: 0,
                     }}
                     dragElastic={0.2}
+                    dragSnapToOrigin
                     onDragEnd={(_e, info) => {
                       if (info.offset.y < -50) {
                         playHiddenCard(i);
@@ -924,7 +925,7 @@ export function Mesa() {
                 ))
               : view.handCards.map((c, i) => (
                   <motion.div
-                    key={i}
+                    key={`${c.rank}${c.suit}`}
                     className={styles.handCardWrapper}
                     whileHover={{ y: -12, scale: 1.06 }}
                     initial={{ scale: 0, y: 30 }}
@@ -938,6 +939,7 @@ export function Mesa() {
                       bottom: 0,
                     }}
                     dragElastic={0.2}
+                    dragSnapToOrigin
                     onDragEnd={(_e, info) => {
                       if (info.offset.y < -50) {
                         playVisibleCard(c);
