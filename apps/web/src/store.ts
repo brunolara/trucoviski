@@ -651,7 +651,7 @@ export const useStore = create<StoreState>()((set, get) => {
     ...initialState,
 
     setNickname(name) {
-      set({ nickname: name.slice(0, NICKNAME_MAX_LENGTH).trim() });
+      set({ nickname: name.slice(0, NICKNAME_MAX_LENGTH) });
     },
 
     setRoomId(id) {
@@ -674,7 +674,8 @@ export const useStore = create<StoreState>()((set, get) => {
 
     async createRoom() {
       const { nickname } = get();
-      if (!nickname) {
+      const trimmedNick = nickname.trim();
+      if (!trimmedNick) {
         set({ error: "Escolha um nickname primeiro." });
         return;
       }
@@ -683,7 +684,7 @@ export const useStore = create<StoreState>()((set, get) => {
       try {
         const client = new Client(SERVER_URL);
         const room = await client.create("truco", {
-          nickname,
+          nickname: trimmedNick,
           clientId: CLIENT_ID,
         });
 
@@ -692,11 +693,13 @@ export const useStore = create<StoreState>()((set, get) => {
 
         // Recupera snapshot inicial que pode ter sido emitido durante o await.
         room.send("sync", {});
-        persistSession(room, nickname);
+        persistSession(room, trimmedNick);
 
         set({
           client,
           room,
+          nickname: trimmedNick,
+          roomId: room.roomId,
           screen: "lobby",
           connecting: false,
         });
@@ -718,16 +721,30 @@ export const useStore = create<StoreState>()((set, get) => {
 
     async joinRoom() {
       const { nickname, roomId } = get();
-      if (!nickname || !roomId) {
-        set({ error: "Preencha nickname e código da sala." });
+      const trimmedNick = nickname.trim();
+      const trimmedRoomId = roomId.trim();
+
+      if (!trimmedNick) {
+        set({ error: "Escolha um nickname primeiro." });
         return;
       }
+      if (!trimmedRoomId) {
+        set({ error: "Digite o código da sala." });
+        return;
+      }
+
+      const normalizedCode = normalizeRoomCode(trimmedRoomId);
+      if (!normalizedCode) {
+        set({ error: "Código da sala inválido." });
+        return;
+      }
+
       set({ connecting: true, error: null });
 
       try {
         const client = new Client(SERVER_URL);
-        const room = await client.joinById(normalizeRoomCode(roomId), {
-          nickname,
+        const room = await client.joinById(normalizedCode, {
+          nickname: trimmedNick,
           clientId: CLIENT_ID,
         });
 
@@ -736,17 +753,24 @@ export const useStore = create<StoreState>()((set, get) => {
 
         // Recupera snapshot inicial que pode ter sido emitido durante o await.
         room.send("sync", {});
-        persistSession(room, nickname);
+        persistSession(room, trimmedNick);
 
         set({
           client,
           room,
+          nickname: trimmedNick,
+          roomId: normalizedCode,
           screen: "lobby",
           connecting: false,
         });
       } catch (err) {
+        const msg = String(err);
+        const userMsg =
+          msg.includes("not found") || msg.includes("4212")
+            ? "Sala não encontrada. Verifique o código e tente novamente."
+            : "Erro ao entrar na sala: " + msg;
         set({
-          error: "Erro ao entrar na sala: " + String(err),
+          error: userMsg,
           connecting: false,
         });
       }

@@ -145,8 +145,23 @@ export function formatRoomCode(code: string): string {
 
 /** "  Morangô Exemplar " → "morango-exemplar" (entrada do usuário e URL). */
 export function normalizeRoomCode(raw: string): string {
-  return raw
-    .trim()
+  let text = raw.trim();
+  if (!text) return "";
+
+  try {
+    const url =
+      text.startsWith("http://") || text.startsWith("https://")
+        ? new URL(text)
+        : new URL(text, "http://dummy");
+    const salaParam = url.searchParams.get("sala");
+    if (salaParam) {
+      text = salaParam;
+    }
+  } catch {
+    // ignora erros de parse de URL
+  }
+
+  return text
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")

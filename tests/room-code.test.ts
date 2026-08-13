@@ -38,6 +38,16 @@ describe("normalizeRoomCode", () => {
     expect(normalizeRoomCode("morango exemplar")).toBe("morango-exemplar");
   });
 
+  it("extracts room code from full URLs or query params", () => {
+    expect(
+      normalizeRoomCode("https://trucoviski.app/?sala=morango-exemplar"),
+    ).toBe("morango-exemplar");
+    expect(
+      normalizeRoomCode("http://localhost:5173/?sala=abacaxi-brilhante"),
+    ).toBe("abacaxi-brilhante");
+    expect(normalizeRoomCode("?sala=tamandua-quieto")).toBe("tamandua-quieto");
+  });
+
   it("is idempotent", () => {
     const samples = [
       "  Morangô Exemplar ",
