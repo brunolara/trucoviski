@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ponytail: só a Home é indexável; salas são efêmeras e privadas -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://truco.brunodelara.dev/</loc>
+  </url>
+</urlset>
