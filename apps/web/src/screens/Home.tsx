@@ -11,6 +11,7 @@ export function Home() {
   const screen = useStore((s) => s.screen);
   const setNickname = useStore((s) => s.setNickname);
   const setRoomId = useStore((s) => s.setRoomId);
+  const setError = useStore((s) => s.setError);
   const createBotGame = useStore((s) => s.createBotGame);
   const createRoom = useStore((s) => s.createRoom);
   const joinRoom = useStore((s) => s.joinRoom);
@@ -25,11 +26,42 @@ export function Home() {
 
   if (screen !== "home") return null;
 
-  const canAct = Boolean(nickname) && !connecting;
+  const hasNickname = Boolean(nickname.trim());
+  const hasRoomId = Boolean(roomId.trim());
+  const canAct = hasNickname && !connecting;
 
   function generateNickname() {
     const exclude = nickname ? new Set([nickname]) : new Set<string>();
     setNickname(pickRandomPlayerName(exclude));
+    if (error) setError(null);
+  }
+
+  function handleJoinRoom() {
+    if (!hasNickname) {
+      setError("Escolha um nickname primeiro.");
+      return;
+    }
+    if (!hasRoomId) {
+      setError("Digite o código da sala.");
+      return;
+    }
+    void joinRoom();
+  }
+
+  function handleCreateRoom() {
+    if (!hasNickname) {
+      setError("Escolha um nickname primeiro.");
+      return;
+    }
+    void createRoom();
+  }
+
+  function handlePlayBots() {
+    if (!hasNickname) {
+      setError("Escolha um nickname primeiro.");
+      return;
+    }
+    void createBotGame();
   }
 
   return (
@@ -55,7 +87,20 @@ export function Home() {
             className={styles.input}
             type="text"
             value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
+            onChange={(e) => {
+              setNickname(e.target.value);
+              if (error) setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (hasRoomId) {
+                  handleJoinRoom();
+                } else {
+                  handleCreateRoom();
+                }
+              }
+            }}
             placeholder="Digite seu nome..."
             maxLength={32}
             autoFocus
@@ -117,9 +162,10 @@ export function Home() {
 
         <div className={styles.actions}>
           <button
+            type="button"
             className={styles.primaryBtn}
             disabled={!canAct}
-            onClick={() => void createBotGame()}
+            onClick={handlePlayBots}
             data-testid="play-bots-btn"
           >
             {connecting ? "Conectando..." : "Jogar contra bots"}
@@ -130,9 +176,10 @@ export function Home() {
           </div>
 
           <button
+            type="button"
             className={styles.secondaryBtn}
             disabled={!canAct}
-            onClick={() => void createRoom()}
+            onClick={handleCreateRoom}
             data-testid="create-room-btn"
           >
             Criar sala
@@ -142,17 +189,27 @@ export function Home() {
             className={styles.input}
             type="text"
             value={roomId}
-            onChange={(e) => setRoomId(e.target.value)}
+            onChange={(e) => {
+              setRoomId(e.target.value);
+              if (error) setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleJoinRoom();
+              }
+            }}
             placeholder="Código da sala..."
-            maxLength={32}
+            maxLength={128}
             aria-label="Código da sala"
             data-testid="room-id-input"
           />
 
           <button
+            type="button"
             className={styles.secondaryBtn}
-            disabled={!canAct || !roomId}
-            onClick={() => void joinRoom()}
+            disabled={connecting || !hasRoomId}
+            onClick={handleJoinRoom}
             data-testid="join-room-btn"
           >
             Entrar em sala
