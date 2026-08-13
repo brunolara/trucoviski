@@ -61,4 +61,24 @@ describe("remainingCardsForSeat", () => {
       ),
     ).toBe(2);
   });
+
+  it("counts a tableHold vaza the same as currentVaza", () => {
+    expect(
+      remainingCardsForSeat(
+        {
+          completedVazas: [
+            {
+              plays: [CARD, CARD, CARD, CARD],
+              covered: [false, false, false, false],
+            },
+          ],
+          currentVaza: {
+            plays: [CARD, CARD, CARD, CARD],
+            covered: [false, false, false, false],
+          },
+        },
+        1,
+      ),
+    ).toBe(1);
+  });
 });

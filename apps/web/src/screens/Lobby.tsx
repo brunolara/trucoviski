@@ -1,5 +1,6 @@
 import { useState, type DragEvent } from "react";
 import { formatRoomCode } from "@trucoviski/shared";
+import { PlayerAvatar } from "../components/PlayerAvatar.js";
 import { useStore } from "../store.js";
 import styles from "./Lobby.module.css";
 
@@ -147,6 +148,19 @@ export function Lobby() {
                     onDragEnd={() => setDragSeat(null)}
                   >
                     <span className={styles.seatNum}>S{s + 1}</span>
+                    {kind !== "empty" ? (
+                      <PlayerAvatar
+                        seed={name}
+                        alt=""
+                        size={64}
+                        className={styles.seatAvatar}
+                      />
+                    ) : (
+                      <span
+                        className={styles.seatAvatarEmpty}
+                        aria-hidden="true"
+                      />
+                    )}
                     <span className={styles.seatName}>{name}</span>
                     {s === seat && <span className={styles.you}>(você)</span>}
                     {kind === "bot" && (

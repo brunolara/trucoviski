@@ -206,7 +206,24 @@ describe("ranking", () => {
     expect(result.tiedSeats).toEqual([]);
   });
 
-  it("resolveVaza detects canga (tie)", () => {
+  it("resolveVaza detects canga (tie) entre adversários", () => {
+    const vira: Card = { suit: "ouros", rank: "7" };
+    const plays: [Card, Card, Card, Card] = [
+      { suit: "paus", rank: "3" },
+      { suit: "copas", rank: "3" },
+      { suit: "espadas", rank: "4" },
+      { suit: "ouros", rank: "5" },
+    ];
+    const result = resolveVaza(plays, vira, 0, RANK_ORDER, SUIT_ORDER);
+    // Seats 0 e 1 (times opostos) jogam 3 → canga
+    expect(result.winner).toBeNull();
+    expect(result.tiedSeats).toContain(0);
+    expect(result.tiedSeats).toContain(1);
+    // Seat 0 is closer to dealer (dealerSeat=0) → first in tiedSeats
+    expect(result.tiedSeats[0]).toBe(0);
+  });
+
+  it("empate entre parceiros não é canga: o time leva a vaza", () => {
     const vira: Card = { suit: "ouros", rank: "7" };
     const plays: [Card, Card, Card, Card] = [
       { suit: "paus", rank: "3" },
@@ -215,12 +232,9 @@ describe("ranking", () => {
       { suit: "ouros", rank: "5" },
     ];
     const result = resolveVaza(plays, vira, 0, RANK_ORDER, SUIT_ORDER);
-    // Seats 0 and 2 both play 3 → canga
-    expect(result.winner).toBeNull();
-    expect(result.tiedSeats).toContain(0);
-    expect(result.tiedSeats).toContain(2);
-    // Seat 0 is closer to dealer (dealerSeat=0) → first in tiedSeats
-    expect(result.tiedSeats[0]).toBe(0);
+    // Seats 0 e 2 são parceiros → vence o mais próximo do mão
+    expect(result.winner).toBe(0);
+    expect(result.tiedSeats).toEqual([]);
   });
 });
 
@@ -766,17 +780,17 @@ describe("vaza starter after tie", () => {
     const vira: Card = { suit: "ouros", rank: "4" };
     const plays: [Card, Card, Card, Card] = [
       { suit: "paus", rank: "3" }, // seat 0
-      { suit: "copas", rank: "2" }, // seat 1
-      { suit: "espadas", rank: "3" }, // seat 2
+      { suit: "copas", rank: "3" }, // seat 1
+      { suit: "espadas", rank: "2" }, // seat 2
       { suit: "ouros", rank: "A" }, // seat 3
     ];
-    // Seats 0 and 2 tie with rank 3
+    // Seats 0 and 1 (times opostos) tie with rank 3
     // Dealer is seat 1 (mao)
     const result = resolveVaza(plays, vira, 1, RANK_ORDER, SUIT_ORDER);
     expect(result.winner).toBeNull();
     // Closest to dealer 1: seat 1(0), seat 2(1), seat 3(2), seat 0(3)
-    // Among tied seats 0 and 2: seat 2 is closer (distance 1) vs seat 0 (distance 3)
-    expect(result.tiedSeats[0]).toBe(2);
+    // Among tied seats 0 and 1: seat 1 is closer (distance 0) vs seat 0 (distance 3)
+    expect(result.tiedSeats[0]).toBe(1);
   });
 });
 

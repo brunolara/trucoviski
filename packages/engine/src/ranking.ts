@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- engine determinístico */
 
 import type { Card, Rank, RuleSet, Seat, Suit } from "./types.js";
+import { TEAMS } from "./types.js";
 
 // ---- Rank seguinte (wrap) -------------------------------------------
 
@@ -157,10 +158,15 @@ export function resolveVazaAmong(
     return { winner: bestSeats[0]!, tiedSeats: [] };
   }
 
-  // Canga – ordena empatados pela proximidade ao mão (dealerSeat)
+  // Ordena empatados pela proximidade ao mão (dealerSeat)
   const ordered = bestSeats.sort(
     (a, b) => seatDistance(a, dealerSeat) - seatDistance(b, dealerSeat),
   );
+
+  // Empate entre parceiros não é canga: o time leva a vaza.
+  if (ordered.every((s) => TEAMS[s] === TEAMS[ordered[0]!])) {
+    return { winner: ordered[0]!, tiedSeats: [] };
+  }
 
   return { winner: null, tiedSeats: ordered };
 }

@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "../store.js";
 import type { Card, Seat } from "@trucoviski/shared";
 import { EMOJI_WHITELIST } from "@trucoviski/shared";
 import { motion, AnimatePresence } from "framer-motion";
 import { Carta } from "../components/mesa/Carta.js";
+import { PlayerAvatar } from "../components/PlayerAvatar.js";
 import { cardIsManilha, logLines, seatName } from "../utils/historico.js";
 import { remainingCardsForSeat } from "../utils/mesa.js";
 import styles from "./Mesa.module.css";
@@ -43,8 +44,6 @@ const TRUCO_RAISE_LABEL: Record<number, string> = {
 };
 
 const TRUCO_BTN_ORDER: Record<string, number> = { raise: 0, run: 1, accept: 2 };
-
-const AVATARS = ["🤠", "👵", "🧔", "👩‍🌾"];
 
 const SEAT_POSITIONS = [
   { left: "50%", bottom: "4%" }, // Seat 0 (bottom) - Me
@@ -157,6 +156,38 @@ export function Mesa() {
   // snapshot, uma carta só pode gerar um dispatch, mesmo que touch sintetize
   // um dblclick. A contagem de vazas é necessária quando o vencedor continua
   // como mão na próxima vaza.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const avatarRefs = useRef<(HTMLDivElement | null)[]>([
+    null,
+    null,
+    null,
+    null,
+  ]);
+
+  const avatarCenter = (relSeat: number): { left: number; top: number } => {
+    const board = boardRef.current;
+    const avatar = avatarRefs.current[relSeat];
+    if (board && avatar) {
+      const boardRect = board.getBoundingClientRect();
+      const avatarRect = avatar.getBoundingClientRect();
+      if (avatarRect.width > 0 && avatarRect.height > 0) {
+        return {
+          left: avatarRect.left - boardRect.left + avatarRect.width / 2,
+          top: avatarRect.top - boardRect.top + avatarRect.height / 2,
+        };
+      }
+    }
+    const width = board?.clientWidth ?? 0;
+    const height = board?.clientHeight ?? 0;
+    const fallback = [
+      { left: width / 2, top: height - 28 },
+      { left: width - 28, top: height / 2 },
+      { left: width / 2, top: 28 },
+      { left: 28, top: height / 2 },
+    ];
+    return fallback[relSeat]!;
+  };
+
   const playSnapshotKey = `${view.handNumber}:${view.completedVazas.length}:${turnSeat ?? "none"}`;
   if (playDispatchGuard.current.snapshotKey !== playSnapshotKey) {
     playDispatchGuard.current = {
@@ -168,6 +199,26 @@ export function Mesa() {
   const getRelativeSeat = (absSeat: number) => {
     return (absSeat - seat + 4) % 4;
   };
+
+  // Mede os avatares uma vez por tomate, fora do render: getBoundingClientRect
+  // em fase de render lê layout no meio da árvore e quebra em concurrent mode.
+  const [tomatoPath, setTomatoPath] = useState<{
+    from: { left: number; top: number };
+    to: { left: number; top: number };
+  } | null>(null);
+  const tomatoKey = activeTomato
+    ? `${activeTomato.senderSeat}:${activeTomato.targetSeat}:${activeTomato.timestamp}`
+    : null;
+  useLayoutEffect(() => {
+    if (!activeTomato) {
+      setTomatoPath(null);
+      return;
+    }
+    setTomatoPath({
+      from: avatarCenter(getRelativeSeat(activeTomato.senderSeat)),
+      to: avatarCenter(getRelativeSeat(activeTomato.targetSeat)),
+    });
+  }, [tomatoKey]); // só remede num tomate novo
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,7 +350,7 @@ export function Mesa() {
         {/* Board area (circular 2D). O alerta de truco e os botões de ação
             flutuam sobre a mesa em vez de empurrar o layout. */}
         <div className={styles.boardStack}>
-          <div className={styles.board}>
+          <div className={styles.board} ref={boardRef}>
             <img
               className={styles.tableDecorationHat}
               src="/assets/pixel/chapeu.png"
@@ -440,7 +491,15 @@ export function Mesa() {
             {/* Players Seats */}
             {relativeSeatsOrder.map((relSeat) => {
               const absSeat = ((seat + relSeat) % 4) as Seat;
-              const remainingCards = remainingCardsForSeat(view, absSeat);
+              const remainingCards = remainingCardsForSeat(
+                tableHold
+                  ? {
+                      completedVazas: view.completedVazas,
+                      currentVaza: tableHold,
+                    }
+                  : view,
+                absSeat,
+              );
               const pos = SEAT_POSITIONS[relSeat]!;
               const isTurn =
                 holdWinner !== undefined
@@ -458,6 +517,7 @@ export function Mesa() {
                   key={relSeat}
                   className={`${styles.seat} ${styles[`seat${relSeat}`]}`}
                   data-testid={`seat-${absSeat}`}
+                  data-rel-seat={relSeat}
                   style={{
                     position: "absolute",
                     left: pos.left,
@@ -471,29 +531,32 @@ export function Mesa() {
                   }}
                 >
                   {!isMe && !(relSeat === 2 && view.partnerCards?.length) && (
-                    <div className={styles.seatCardBacks} aria-hidden="true">
+                    <div
+                      className={styles.seatCardBacks}
+                      aria-hidden="true"
+                      data-testid="seat-card-backs"
+                    >
                       {Array.from({ length: remainingCards }, (_, index) => (
                         <Carta covered key={index} />
                       ))}
                     </div>
                   )}
-                  {/* Avatar circle */}
-                  <div
-                    className={`${styles.avatar} ${isTurn ? styles.activeAvatar : ""} ${
-                      (
-                        holdWinner !== undefined
-                          ? holdWinner !== null && !isTurn
-                          : turnSeat !== null && !isTurn
-                      )
-                        ? styles.dimmedAvatar
-                        : ""
-                    }`}
-                    style={{ borderColor: TEAM_COLORS[seatTeam(absSeat)] }}
-                  >
-                    <span className={styles.avatarLabel}>
-                      {AVATARS[absSeat]}
-                    </span>
-                    {/* 🍅 button for others */}
+                  {/* Avatar circle — o tomate fica fora do overflow do retrato */}
+                  <div className={styles.avatarWrap}>
+                    <div
+                      ref={(el) => {
+                        avatarRefs.current[relSeat] = el;
+                      }}
+                      className={`${styles.avatar} ${isTurn ? styles.activeAvatar : ""}`}
+                      style={{ borderColor: TEAM_COLORS[seatTeam(absSeat)] }}
+                    >
+                      <PlayerAvatar
+                        seed={name}
+                        alt=""
+                        size={64}
+                        className={styles.avatarImg}
+                      />
+                    </div>
                     {!isMe && (
                       <button
                         className={styles.tomatoBtn}
@@ -576,52 +639,74 @@ export function Mesa() {
 
             {/* Flying Tomatoes */}
             {activeTomato &&
+              tomatoPath &&
               (() => {
-                const fromRel = getRelativeSeat(activeTomato.senderSeat);
-                const toRel = getRelativeSeat(activeTomato.targetSeat);
-                const fromPos = SEAT_POSITIONS[fromRel]!;
-                const toPos = SEAT_POSITIONS[toRel]!;
+                const fromPos = tomatoPath.from;
+                const toPos = tomatoPath.to;
 
                 return (
                   <motion.div
                     className={styles.tomatoEffect}
                     data-testid="tomato-effect"
                     initial={{
-                      left: fromPos.left || "auto",
-                      top: fromPos.top || "auto",
-                      bottom: fromPos.bottom || "auto",
-                      right: fromPos.right || "auto",
+                      left: fromPos.left,
+                      top: fromPos.top,
                       scale: 0.8,
-                      x: fromRel === 0 || fromRel === 2 ? "-50%" : "0%",
-                      y: fromRel === 1 || fromRel === 3 ? "-50%" : "0%",
+                      opacity: 1,
+                      x: "-50%",
+                      y: "-50%",
                     }}
                     animate={
                       activeTomato.phase === "flying"
                         ? {
-                            left: toPos.left || "auto",
-                            top: toPos.top || "auto",
-                            bottom: toPos.bottom || "auto",
-                            right: toPos.right || "auto",
-                            scale: 1.3,
-                            x: toRel === 0 || toRel === 2 ? "-50%" : "0%",
-                            y: toRel === 1 || toRel === 3 ? "-50%" : "0%",
+                            left: toPos.left,
+                            top: toPos.top,
+                            scale: 1.15,
+                            opacity: 1,
+                            x: "-50%",
+                            y: "-50%",
                           }
-                        : {
-                            left: toPos.left || "auto",
-                            top: toPos.top || "auto",
-                            bottom: toPos.bottom || "auto",
-                            right: toPos.right || "auto",
-                            scale: [1, 2.2, 1.4],
-                            rotate: [0, 20, -20, 0],
-                            x: toRel === 0 || toRel === 2 ? "-50%" : "0%",
-                            y: toRel === 1 || toRel === 3 ? "-50%" : "0%",
-                          }
+                        : activeTomato.phase === "splat"
+                          ? {
+                              left: toPos.left,
+                              top: toPos.top,
+                              scale: [1.15, 1.35, 1.2],
+                              opacity: 1,
+                              x: "-50%",
+                              y: "-50%",
+                            }
+                          : {
+                              left: toPos.left,
+                              top: toPos.top + 56,
+                              scale: 1.05,
+                              opacity: 0,
+                              x: "-50%",
+                              y: "-50%",
+                            }
                     }
                     transition={{
-                      duration: activeTomato.phase === "flying" ? 0.5 : 0.2,
+                      duration:
+                        activeTomato.phase === "flying"
+                          ? 0.5
+                          : activeTomato.phase === "splat"
+                            ? 0.2
+                            : 0.5,
+                      ease:
+                        activeTomato.phase === "exit" ? "easeIn" : "easeOut",
                     }}
                   >
-                    {activeTomato.phase === "flying" ? "🍅" : "💥🍅💦"}
+                    <img
+                      key={activeTomato.phase === "flying" ? "fly" : "splat"}
+                      className={styles.tomatoSprite}
+                      src={
+                        activeTomato.phase === "flying"
+                          ? "/assets/tomato-fly.webp"
+                          : "/assets/tomato-splat.webp"
+                      }
+                      alt=""
+                      aria-hidden="true"
+                      draggable={false}
+                    />
                   </motion.div>
                 );
               })()}
@@ -883,9 +968,6 @@ export function Mesa() {
                         )
                       }
                     />
-                    {cardIsManilha(c, view.vira) && (
-                      <span className={styles.manilhaBadge}>Manilha</span>
-                    )}
                     {isMyTurn && (
                       <div className={styles.cardControls}>
                         {legalPlayHidden.some(

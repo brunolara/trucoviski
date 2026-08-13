@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /monitor
+
+Sitemap: https://truco.brunodelara.dev/sitemap.xml
