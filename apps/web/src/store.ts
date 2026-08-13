@@ -465,6 +465,9 @@ export const useStore = create<StoreState>()((set, get) => {
       }
 
       if (deferNextHand) {
+        // Segunda passada com a view real, agora que a apresentação acabou.
+        // Cuidado: `snap.events` é reaplicado, então qualquer efeito novo que
+        // reaja a `events` roda duas vezes para o snapshot de fim de mão.
         applySnapshot(snap);
         set({ banner: null });
       }

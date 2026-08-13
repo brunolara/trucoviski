@@ -9,7 +9,7 @@ type CartaProps = Omit<HTMLAttributes<HTMLDivElement>, "style"> & {
   style?: CSSProperties;
 };
 
-/** Colunas do 8BitDeck: 2 3 4 5 6 7 8 9 10 J Q K A */
+/** Colunas de card_faces: 2 3 4 5 6 7 8 9 10 J Q K A */
 const RANK_COL: Record<Card["rank"], number> = {
   "2": 0,
   "3": 1,
@@ -23,7 +23,7 @@ const RANK_COL: Record<Card["rank"], number> = {
   A: 12,
 };
 
-/** Linhas do 8BitDeck: copas, paus, ouros, espadas */
+/** Linhas de card_faces: copas, paus, ouros, espadas */
 const SUIT_ROW: Record<Card["suit"], number> = {
   copas: 0,
   paus: 1,

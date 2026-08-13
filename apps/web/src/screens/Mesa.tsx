@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "../store.js";
 import type { Card, Seat } from "@trucoviski/shared";
 import { EMOJI_WHITELIST } from "@trucoviski/shared";
@@ -199,6 +199,26 @@ export function Mesa() {
   const getRelativeSeat = (absSeat: number) => {
     return (absSeat - seat + 4) % 4;
   };
+
+  // Mede os avatares uma vez por tomate, fora do render: getBoundingClientRect
+  // em fase de render lê layout no meio da árvore e quebra em concurrent mode.
+  const [tomatoPath, setTomatoPath] = useState<{
+    from: { left: number; top: number };
+    to: { left: number; top: number };
+  } | null>(null);
+  const tomatoKey = activeTomato
+    ? `${activeTomato.senderSeat}:${activeTomato.targetSeat}:${activeTomato.timestamp}`
+    : null;
+  useLayoutEffect(() => {
+    if (!activeTomato) {
+      setTomatoPath(null);
+      return;
+    }
+    setTomatoPath({
+      from: avatarCenter(getRelativeSeat(activeTomato.senderSeat)),
+      to: avatarCenter(getRelativeSeat(activeTomato.targetSeat)),
+    });
+  }, [tomatoKey]); // só remede num tomate novo
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -619,11 +639,10 @@ export function Mesa() {
 
             {/* Flying Tomatoes */}
             {activeTomato &&
+              tomatoPath &&
               (() => {
-                const fromRel = getRelativeSeat(activeTomato.senderSeat);
-                const toRel = getRelativeSeat(activeTomato.targetSeat);
-                const fromPos = avatarCenter(fromRel);
-                const toPos = avatarCenter(toRel);
+                const fromPos = tomatoPath.from;
+                const toPos = tomatoPath.to;
 
                 return (
                   <motion.div

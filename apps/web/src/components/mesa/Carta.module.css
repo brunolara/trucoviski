@@ -16,7 +16,7 @@
   border-radius: 5.6%;
   background-color: transparent;
   background-image:
-    url("/assets/pixel/8BitDeck.png"), url("/assets/pixel/Enhancers.png");
+    url("/assets/pixel/card_faces.png"), url("/assets/pixel/card_bases.png");
   background-repeat: no-repeat, no-repeat;
   background-size:
     1300% 400%,

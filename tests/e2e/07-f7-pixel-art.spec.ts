@@ -22,8 +22,8 @@
 
 import { test, expect, type Page } from "@playwright/test";
 
-const FRONT_SPRITE = "8BitDeck.png";
-const BASE_SPRITE = "Enhancers.png";
+const FRONT_SPRITE = "card_faces.png";
+const BASE_SPRITE = "card_bases.png";
 const BACK_SPRITE = "card_back_and_extras.png";
 
 async function joinMesa(page: Page) {
@@ -61,7 +61,7 @@ test.describe("F7: Pixel Art spritesheet", () => {
       expect(t.trim()).toBe("");
     }
 
-    // Cada carta da mão: face (8BitDeck) sobre base (Enhancers).
+    // Cada carta da mão: face (card_faces) sobre base (card_bases).
     for (let i = 0; i < 3; i++) {
       const bg = await handCards
         .nth(i)
@@ -95,7 +95,7 @@ test.describe("F7: Pixel Art spritesheet", () => {
     expect(viraBg, "vira deve usar o spritesheet de frente").toContain(
       FRONT_SPRITE,
     );
-    expect(viraBg, "vira deve usar a base Enhancers").toContain(BASE_SPRITE);
+    expect(viraBg, "vira deve usar a base card_bases").toContain(BASE_SPRITE);
   });
 
   test("cartas cobertas no histórico de vazas usam spritesheet de verso", async ({
