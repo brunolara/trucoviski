@@ -198,6 +198,7 @@
   position: relative;
   z-index: 7;
   flex: none;
+  border-radius: 50%;
 }
 
 /* z-index acima do miolo da mesa (6): o avatar nunca fica coberto por carta */
@@ -228,7 +229,11 @@
 }
 .activeAvatar {
   border-color: #2de2e6 !important;
+  border-width: 3px;
+}
+.avatarWrap:has(.activeAvatar) {
   transform: scale(1.25);
+  box-shadow: 0 0 0 3px #2de2e6;
   animation: turnPulse 1.1s ease-in-out infinite;
 }
 /* nome de quem joga agora também acende */
@@ -238,7 +243,9 @@
 }
 @keyframes turnPulse {
   50% {
-    box-shadow: 0 0 14px 5px #2de2e6;
+    box-shadow:
+      0 0 0 3px #2de2e6,
+      0 0 14px 5px #2de2e6;
   }
 }
 .seatName {
@@ -586,9 +593,10 @@
 }
 @keyframes pulseGlowCyan {
   50% {
-    box-shadow:
-      0 0 22px 6px rgb(45 226 230 / 90%),
-      inset 0 0 0 2px rgb(45 226 230 / 70%);
+    filter: drop-shadow(0 0 10px rgb(45 226 230 / 95%))
+      drop-shadow(0 0 18px rgb(45 226 230 / 65%))
+      drop-shadow(0 5px 0 rgb(0 0 0 / 40%))
+      drop-shadow(0 7px 12px rgb(0 0 0 / 35%));
   }
 }
 .handLabel {
@@ -623,23 +631,6 @@
   cursor: pointer;
   filter: drop-shadow(0 5px 0 rgb(0 0 0 / 40%))
     drop-shadow(0 7px 12px rgb(0 0 0 / 35%));
-}
-.handCardWrapper:has(.manilhaBadge) .handCard {
-  outline: 3px solid #f4d06a;
-  outline-offset: 1px;
-}
-.manilhaBadge {
-  position: absolute;
-  top: -10px;
-  right: -8px;
-  z-index: 2;
-  padding: 2px 4px;
-  color: #f4d06a;
-  background: #1c140c;
-  border: 2px solid #f4d06a;
-  border-radius: 3px;
-  font-family: "Press Start 2P", monospace;
-  font-size: 6px;
 }
 .handCard:focus-visible,
 .ferroCard:focus-visible {

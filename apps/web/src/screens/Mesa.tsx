@@ -471,7 +471,15 @@ export function Mesa() {
             {/* Players Seats */}
             {relativeSeatsOrder.map((relSeat) => {
               const absSeat = ((seat + relSeat) % 4) as Seat;
-              const remainingCards = remainingCardsForSeat(view, absSeat);
+              const remainingCards = remainingCardsForSeat(
+                tableHold
+                  ? {
+                      completedVazas: view.completedVazas,
+                      currentVaza: tableHold,
+                    }
+                  : view,
+                absSeat,
+              );
               const pos = SEAT_POSITIONS[relSeat]!;
               const isTurn =
                 holdWinner !== undefined
@@ -941,9 +949,6 @@ export function Mesa() {
                         )
                       }
                     />
-                    {cardIsManilha(c, view.vira) && (
-                      <span className={styles.manilhaBadge}>Manilha</span>
-                    )}
                     {isMyTurn && (
                       <div className={styles.cardControls}>
                         {legalPlayHidden.some(

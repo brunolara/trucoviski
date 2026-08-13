@@ -1,43 +1,30 @@
 .card {
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   width: 100%;
   height: 100%;
-  padding: var(--card-padding, 7%);
   overflow: hidden;
   background: #f2e8d5;
   border: var(--card-border-width, 3px) solid #1c140c;
   border-radius: var(--card-radius, 5px);
-  font-family: "VT323", monospace;
-  line-height: 0.85;
   user-select: none;
 }
 
-.corner,
-.cornerBottom {
-  font-size: var(--card-rank-size, 19px);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.cornerBottom {
-  align-self: flex-end;
-  transform: rotate(180deg);
-}
-
-.suit {
-  align-self: center;
-  font-family: serif;
-  font-size: var(--card-suit-size, 40px);
-  line-height: 0.8;
-  text-shadow: 2px 2px 0 rgb(0 0 0 / 20%);
-}
-
-.manilha {
-  border-color: #f4d06a;
-  box-shadow: inset 0 0 0 1px #caa23a;
+.face {
+  padding: 0;
+  border: 0;
+  /* Raio alinhado ao canto do sprite (~8px em 142) para o glow seguir a carta */
+  border-radius: 5.6%;
+  background-color: transparent;
+  background-image:
+    url("/assets/pixel/8BitDeck.png"), url("/assets/pixel/Enhancers.png");
+  background-repeat: no-repeat, no-repeat;
+  background-size:
+    1300% 400%,
+    700% 500%;
+  background-position:
+    var(--face-x) var(--face-y),
+    var(--base-x) var(--base-y);
+  image-rendering: pixelated;
 }
 
 .covered {
