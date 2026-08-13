@@ -412,8 +412,15 @@
 .tomatoEffect {
   position: absolute;
   z-index: 30;
-  font-size: 32px;
+  width: 64px;
+  height: 64px;
   pointer-events: none;
+}
+.tomatoSprite {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* Altura fixa: a mesa só fica estável se todos os irmãos dela tiverem

@@ -157,6 +157,38 @@ export function Mesa() {
   // snapshot, uma carta só pode gerar um dispatch, mesmo que touch sintetize
   // um dblclick. A contagem de vazas é necessária quando o vencedor continua
   // como mão na próxima vaza.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const avatarRefs = useRef<(HTMLDivElement | null)[]>([
+    null,
+    null,
+    null,
+    null,
+  ]);
+
+  const avatarCenter = (relSeat: number): { left: number; top: number } => {
+    const board = boardRef.current;
+    const avatar = avatarRefs.current[relSeat];
+    if (board && avatar) {
+      const boardRect = board.getBoundingClientRect();
+      const avatarRect = avatar.getBoundingClientRect();
+      if (avatarRect.width > 0 && avatarRect.height > 0) {
+        return {
+          left: avatarRect.left - boardRect.left + avatarRect.width / 2,
+          top: avatarRect.top - boardRect.top + avatarRect.height / 2,
+        };
+      }
+    }
+    const width = board?.clientWidth ?? 0;
+    const height = board?.clientHeight ?? 0;
+    const fallback = [
+      { left: width / 2, top: height - 28 },
+      { left: width - 28, top: height / 2 },
+      { left: width / 2, top: 28 },
+      { left: 28, top: height / 2 },
+    ];
+    return fallback[relSeat]!;
+  };
+
   const playSnapshotKey = `${view.handNumber}:${view.completedVazas.length}:${turnSeat ?? "none"}`;
   if (playDispatchGuard.current.snapshotKey !== playSnapshotKey) {
     playDispatchGuard.current = {
@@ -299,7 +331,7 @@ export function Mesa() {
         {/* Board area (circular 2D). O alerta de truco e os botões de ação
             flutuam sobre a mesa em vez de empurrar o layout. */}
         <div className={styles.boardStack}>
-          <div className={styles.board}>
+          <div className={styles.board} ref={boardRef}>
             <img
               className={styles.tableDecorationHat}
               src="/assets/pixel/chapeu.png"
@@ -479,6 +511,9 @@ export function Mesa() {
                   )}
                   {/* Avatar circle */}
                   <div
+                    ref={(el) => {
+                      avatarRefs.current[relSeat] = el;
+                    }}
                     className={`${styles.avatar} ${isTurn ? styles.activeAvatar : ""} ${
                       (
                         holdWinner !== undefined
@@ -579,49 +614,72 @@ export function Mesa() {
               (() => {
                 const fromRel = getRelativeSeat(activeTomato.senderSeat);
                 const toRel = getRelativeSeat(activeTomato.targetSeat);
-                const fromPos = SEAT_POSITIONS[fromRel]!;
-                const toPos = SEAT_POSITIONS[toRel]!;
+                const fromPos = avatarCenter(fromRel);
+                const toPos = avatarCenter(toRel);
 
                 return (
                   <motion.div
                     className={styles.tomatoEffect}
                     data-testid="tomato-effect"
                     initial={{
-                      left: fromPos.left || "auto",
-                      top: fromPos.top || "auto",
-                      bottom: fromPos.bottom || "auto",
-                      right: fromPos.right || "auto",
+                      left: fromPos.left,
+                      top: fromPos.top,
                       scale: 0.8,
-                      x: fromRel === 0 || fromRel === 2 ? "-50%" : "0%",
-                      y: fromRel === 1 || fromRel === 3 ? "-50%" : "0%",
+                      opacity: 1,
+                      x: "-50%",
+                      y: "-50%",
                     }}
                     animate={
                       activeTomato.phase === "flying"
                         ? {
-                            left: toPos.left || "auto",
-                            top: toPos.top || "auto",
-                            bottom: toPos.bottom || "auto",
-                            right: toPos.right || "auto",
-                            scale: 1.3,
-                            x: toRel === 0 || toRel === 2 ? "-50%" : "0%",
-                            y: toRel === 1 || toRel === 3 ? "-50%" : "0%",
+                            left: toPos.left,
+                            top: toPos.top,
+                            scale: 1.15,
+                            opacity: 1,
+                            x: "-50%",
+                            y: "-50%",
                           }
-                        : {
-                            left: toPos.left || "auto",
-                            top: toPos.top || "auto",
-                            bottom: toPos.bottom || "auto",
-                            right: toPos.right || "auto",
-                            scale: [1, 2.2, 1.4],
-                            rotate: [0, 20, -20, 0],
-                            x: toRel === 0 || toRel === 2 ? "-50%" : "0%",
-                            y: toRel === 1 || toRel === 3 ? "-50%" : "0%",
-                          }
+                        : activeTomato.phase === "splat"
+                          ? {
+                              left: toPos.left,
+                              top: toPos.top,
+                              scale: [1.15, 1.35, 1.2],
+                              opacity: 1,
+                              x: "-50%",
+                              y: "-50%",
+                            }
+                          : {
+                              left: toPos.left,
+                              top: toPos.top + 56,
+                              scale: 1.05,
+                              opacity: 0,
+                              x: "-50%",
+                              y: "-50%",
+                            }
                     }
                     transition={{
-                      duration: activeTomato.phase === "flying" ? 0.5 : 0.2,
+                      duration:
+                        activeTomato.phase === "flying"
+                          ? 0.5
+                          : activeTomato.phase === "splat"
+                            ? 0.2
+                            : 0.5,
+                      ease:
+                        activeTomato.phase === "exit" ? "easeIn" : "easeOut",
                     }}
                   >
-                    {activeTomato.phase === "flying" ? "🍅" : "💥🍅💦"}
+                    <img
+                      key={activeTomato.phase === "flying" ? "fly" : "splat"}
+                      className={styles.tomatoSprite}
+                      src={
+                        activeTomato.phase === "flying"
+                          ? "/assets/tomato-fly.webp"
+                          : "/assets/tomato-splat.webp"
+                      }
+                      alt=""
+                      aria-hidden="true"
+                      draggable={false}
+                    />
                   </motion.div>
                 );
               })()}

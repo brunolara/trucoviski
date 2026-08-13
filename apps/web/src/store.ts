@@ -133,7 +133,7 @@ export interface StoreState {
   activeTomato: {
     senderSeat: number;
     targetSeat: number;
-    phase: "flying" | "splat";
+    phase: "flying" | "splat" | "exit";
     timestamp: number;
   } | null;
 
@@ -526,11 +526,28 @@ export const useStore = create<StoreState>()((set, get) => {
                 state.activeTomato.senderSeat === msg.senderSeat &&
                 state.activeTomato.targetSeat === msg.targetSeat
               ) {
-                return { activeTomato: null };
+                return {
+                  activeTomato: {
+                    ...state.activeTomato,
+                    phase: "exit",
+                  },
+                };
               }
               return {};
             });
-          }, 1000);
+            setTimeout(() => {
+              set((state) => {
+                if (
+                  state.activeTomato &&
+                  state.activeTomato.senderSeat === msg.senderSeat &&
+                  state.activeTomato.targetSeat === msg.targetSeat
+                ) {
+                  return { activeTomato: null };
+                }
+                return {};
+              });
+            }, 500);
+          }, 850);
         }, 500);
       },
     );
