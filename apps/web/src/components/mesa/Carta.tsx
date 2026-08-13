@@ -9,41 +9,44 @@ type CartaProps = Omit<HTMLAttributes<HTMLDivElement>, "style"> & {
   style?: CSSProperties;
 };
 
-/** Colunas de card_faces: 2 3 4 5 6 7 8 9 10 J Q K A */
+/** Colunas de card_fronts: A 2 3 4 5 6 7 8 9 10 J Q K */
 const RANK_COL: Record<Card["rank"], number> = {
-  "2": 0,
-  "3": 1,
-  "4": 2,
-  "5": 3,
-  "6": 4,
-  "7": 5,
-  J: 9,
-  Q: 10,
-  K: 11,
-  A: 12,
+  A: 0,
+  "2": 1,
+  "3": 2,
+  "4": 3,
+  "5": 4,
+  "6": 5,
+  "7": 6,
+  J: 10,
+  Q: 11,
+  K: 12,
 };
 
-/** Linhas de card_faces: copas, paus, ouros, espadas */
+/** Linhas de card_fronts: ouros, paus, copas, espadas */
 const SUIT_ROW: Record<Card["suit"], number> = {
-  copas: 0,
+  ouros: 0,
   paus: 1,
-  ouros: 2,
+  copas: 2,
   espadas: 3,
 };
 
-const FACE_COLS = 13;
-const FACE_ROWS = 4;
-const BASE_COLS = 7;
-const BASE_ROWS = 5;
-const BASE_WHITE_COL = 1;
-const BASE_GOLD_COL = 6;
+/* Geometria de card_fronts.png: folha 926x391, cartas de 68x94 com passo 71x97
+   e 3px de margem. O passo não divide a folha em partes iguais, então a conta
+   ingênua (i / (n-1)) faz a carta derivar alguns px até a última coluna.
+   Mantenha em sincronia com background-size em Carta.module.css. */
+const SHEET_W = 926;
+const SHEET_H = 391;
+const CELL_W = 71;
+const CELL_H = 97;
+const MARGIN = 3;
 
-function spritePos(index: number, count: number): string {
-  if (count <= 1) return "0%";
-  return `${(index / (count - 1)) * 100}%`;
+function spritePos(index: number, cell: number, sheet: number): string {
+  const cells = sheet / cell;
+  return `${((index + MARGIN / cell) / (cells - 1)) * 100}%`;
 }
 
-/** Carta de truco: frente em pixel art (base + face) e verso intacto. */
+/** Carta de truco: frente em pixel art (ouro na manilha) e verso intacto. */
 export function Carta({
   card,
   covered = false,
@@ -58,20 +61,15 @@ export function Carta({
     showFace && card
       ? ({
           ...style,
-          "--face-x": spritePos(RANK_COL[card.rank], FACE_COLS),
-          "--face-y": spritePos(SUIT_ROW[card.suit], FACE_ROWS),
-          "--base-x": spritePos(
-            manilha ? BASE_GOLD_COL : BASE_WHITE_COL,
-            BASE_COLS,
-          ),
-          "--base-y": spritePos(0, BASE_ROWS),
+          "--face-x": spritePos(RANK_COL[card.rank], CELL_W, SHEET_W),
+          "--face-y": spritePos(SUIT_ROW[card.suit], CELL_H, SHEET_H),
         } as CSSProperties)
       : style;
 
   return (
     <div
       {...props}
-      className={`${styles.card} ${covered ? styles.covered : ""} ${showFace ? styles.face : ""} ${className ?? ""}`}
+      className={`${styles.card} ${covered ? styles.covered : ""} ${showFace ? styles.face : ""} ${showFace && manilha ? styles.faceManilha : ""} ${className ?? ""}`}
       style={faceStyle}
       aria-label={
         ariaLabel ??

@@ -12,19 +12,51 @@
 .face {
   padding: 0;
   border: 0;
-  /* Raio alinhado ao canto do sprite (~8px em 142) para o glow seguir a carta */
+  /* Raio alinhado ao canto do sprite para o glow seguir a carta */
   border-radius: 5.6%;
   background-color: transparent;
-  background-image:
-    url("/assets/pixel/card_faces.png"), url("/assets/pixel/card_bases.png");
-  background-repeat: no-repeat, no-repeat;
-  background-size:
-    1300% 400%,
-    700% 500%;
-  background-position:
-    var(--face-x) var(--face-y),
-    var(--base-x) var(--base-y);
+  background-image: url("/assets/pixel/card_fronts.png");
+  background-repeat: no-repeat;
+  /* 926/71 x 391/97 — uma célula do sprite ocupa exatamente a carta */
+  background-size: 1304.2254% 403.0928%;
+  background-position: var(--face-x) var(--face-y);
   image-rendering: pixelated;
+}
+
+/* Base ouro da manilha: multiplica o dourado sobre o corpo branco da carta.
+   Vai num ::after, não no próprio card: filter roda antes de mask no pipeline,
+   então mascarar o card recortaria o glow ciano da vez. */
+.faceManilha {
+  position: relative;
+  isolation: isolate;
+}
+
+.faceManilha::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Faixas claras em diagonal: no multiply, branco é identidade, então cada
+     faixa deixa passar o creme da carta e vira reflexo. Stops duros para a
+     borda ficar recortada, combinando com o pixel art. */
+  background-color: #f0c65c;
+  background-image: linear-gradient(
+    115deg,
+    transparent 0 13%,
+    rgb(255 255 255 / 55%) 13% 16%,
+    transparent 16% 20%,
+    rgb(255 255 255 / 45%) 20% 23%,
+    transparent 23% 45%,
+    rgb(255 255 255 / 70%) 45% 57%,
+    transparent 57% 73%,
+    rgb(255 255 255 / 50%) 73% 77%,
+    transparent 77%
+  );
+  mix-blend-mode: multiply;
+  /* A máscara é o próprio sprite: sem ela o ouro vaza nos cantos e nas frestas */
+  mask-image: url("/assets/pixel/card_fronts.png");
+  mask-repeat: no-repeat;
+  mask-size: 1304.2254% 403.0928%;
+  mask-position: var(--face-x) var(--face-y);
 }
 
 .covered {
