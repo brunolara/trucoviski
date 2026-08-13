@@ -208,6 +208,12 @@ describe("store presentation — beats da vaza", () => {
   });
 
   it("adiará screen end até o fim dos holds", async () => {
+    const oldVira = { rank: "7" as const, suit: "paus" as const };
+    useStore.getState().handleSnapshot({
+      ...snapWith([]),
+      view: baseView({ vira: oldVira, handCards: [] }),
+    });
+
     useStore.getState().handleSnapshot(
       snapWith(
         [
@@ -226,11 +232,127 @@ describe("store presentation — beats da vaza", () => {
     expect(useStore.getState().status).toBe("finished");
     expect(useStore.getState().screen).toBe("mesa");
     expect(useStore.getState().tableHold).not.toBeNull();
+    expect(useStore.getState().view?.vira).toEqual(oldVira);
 
     await vi.advanceTimersByTimeAsync(600 + 1600 + 300 + 2200);
     expect(useStore.getState().screen).toBe("end");
     expect(useStore.getState().tableHold).toBeNull();
     expect(useStore.getState().banner).toBeNull();
+  });
+
+  it("não troca vira nem redeal enquanto apresenta o fim da mão", async () => {
+    const oldVira = { rank: "4" as const, suit: "paus" as const };
+    const newVira = { rank: "5" as const, suit: "copas" as const };
+    const lastCard = { rank: "6" as const, suit: "ouros" as const };
+    const nextHand = [
+      { rank: "3" as const, suit: "paus" as const },
+      { rank: "2" as const, suit: "copas" as const },
+      { rank: "A" as const, suit: "espadas" as const },
+    ];
+
+    useStore.getState().handleSnapshot({
+      ...snapWith([]),
+      view: baseView({
+        handNumber: 1,
+        vira: oldVira,
+        handCards: [lastCard],
+        scores: [1, 0],
+      }),
+    });
+
+    useStore.getState().handleSnapshot({
+      ...snapWith([
+        {
+          type: "cardPlayed",
+          seat: 0,
+          card: lastCard,
+          covered: false,
+        },
+        vazaCompleted,
+        handFinished,
+        {
+          type: "handStarted",
+          handNumber: 2,
+          dealerSeat: 1,
+          vira: newVira,
+        },
+      ]),
+      view: baseView({
+        handNumber: 2,
+        vira: newVira,
+        handCards: nextHand,
+        completedVazas: [],
+        currentVaza: null,
+        scores: [2, 0],
+      }),
+    });
+
+    expect(useStore.getState().view?.vira).toEqual(oldVira);
+    expect(useStore.getState().view?.handCards).toEqual([]);
+    expect(useStore.getState().tableHold).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(600 + 1600 + 300);
+    expect(useStore.getState().view?.vira).toEqual(oldVira);
+    expect(useStore.getState().view?.handCards).toEqual([]);
+    expect(useStore.getState().banner?.text).toContain("tento");
+
+    await vi.advanceTimersByTimeAsync(2200);
+    expect(useStore.getState().view?.vira).toEqual(newVira);
+    expect(useStore.getState().view?.handCards).toEqual(nextHand);
+    expect(useStore.getState().banner).toBeNull();
+  });
+
+  it("também adia o redeal depois de correr / desistir", async () => {
+    const oldVira = { rank: "4" as const, suit: "paus" as const };
+    const newVira = { rank: "5" as const, suit: "copas" as const };
+
+    useStore.getState().handleSnapshot({
+      ...snapWith([]),
+      view: baseView({
+        handNumber: 1,
+        vira: oldVira,
+        handCards: [
+          { rank: "6", suit: "ouros" },
+          { rank: "7", suit: "paus" },
+        ],
+      }),
+    });
+
+    useStore.getState().handleSnapshot({
+      ...snapWith([
+        {
+          type: "trucoRan",
+          seat: 1,
+          winnerTeam: 0,
+          tentos: 1,
+        },
+        handFinished,
+        {
+          type: "handStarted",
+          handNumber: 2,
+          dealerSeat: 1,
+          vira: newVira,
+        },
+      ]),
+      view: baseView({
+        handNumber: 2,
+        vira: newVira,
+        handCards: [
+          { rank: "3", suit: "paus" },
+          { rank: "2", suit: "copas" },
+          { rank: "A", suit: "espadas" },
+        ],
+        completedVazas: [],
+        scores: [2, 0],
+      }),
+    });
+
+    expect(useStore.getState().view?.vira).toEqual(oldVira);
+    expect(useStore.getState().view?.handCards).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(useStore.getState().view?.vira).toEqual(newVira);
+    expect(useStore.getState().view?.handCards).toHaveLength(3);
   });
 });
 

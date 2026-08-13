@@ -1,8 +1,16 @@
-import type { PlayerView, Seat } from "@trucoviski/shared";
+import type { Card, Seat } from "@trucoviski/shared";
+
+type VazaSlots = {
+  plays: readonly (Card | null)[];
+  covered: readonly boolean[];
+};
 
 /** Número de cartas ainda na mão de um assento, para renderizar os versos. */
 export function remainingCardsForSeat(
-  view: Pick<PlayerView, "completedVazas" | "currentVaza">,
+  view: {
+    completedVazas: readonly VazaSlots[];
+    currentVaza: VazaSlots | null;
+  },
   seat: Seat,
 ): number {
   const vazas = [

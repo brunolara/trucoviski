@@ -271,6 +271,32 @@ function holdForEvents(events: GameEvent[] | undefined): number {
   return ms;
 }
 
+function isNextHandSnapshot(events: GameEvent[] | undefined): boolean {
+  return (
+    events?.some(
+      (e) =>
+        e.type === "handStarted" ||
+        e.type === "handFinished" ||
+        e.type === "matchFinished",
+    ) ?? false
+  );
+}
+
+/** Mantém vira e mesa da mão que acabou; cartas novas só depois do hold. */
+function viewUntilNextHand(
+  prev: PlayerView,
+  next: PlayerView | null | undefined,
+): PlayerView {
+  return {
+    ...prev,
+    handCards: [],
+    partnerCards: undefined,
+    currentVaza: null,
+    legalActions: [],
+    scores: next?.scores ?? prev.scores,
+  };
+}
+
 function bannerForEvents(
   events: GameEvent[] | undefined,
   nicknames: Record<number, string>,
@@ -331,28 +357,34 @@ export const useStore = create<StoreState>()((set, get) => {
   const snapshotQueue: SnapshotMessage[] = [];
   let processingQueue = false;
 
-  function applySnapshot(snap: SnapshotMessage): void {
+  function applySnapshot(
+    snap: SnapshotMessage,
+    viewOverride?: PlayerView | null,
+  ): void {
     const prevView = get().view;
+    const incoming = snap.view ?? null;
+    const view = viewOverride !== undefined ? viewOverride : incoming;
 
     // Check if new hand or new vaza completed
     const prevCompletedVazas = prevView?.completedVazas.length ?? 0;
-    const newCompletedVazas = snap.view?.completedVazas.length ?? 0;
+    const newCompletedVazas = incoming?.completedVazas.length ?? 0;
 
     const prevPlays =
       prevView?.currentVaza?.plays.filter((p) => p !== null).length ?? 0;
     const newPlays =
-      snap.view?.currentVaza?.plays.filter((p) => p !== null).length ?? 0;
+      incoming?.currentVaza?.plays.filter((p) => p !== null).length ?? 0;
 
     // Trigger sounds
     if (snap.status === "playing" && prevView === null) {
       sounds.playDeal();
-    } else if (snap.status === "playing" && snap.view) {
+    } else if (snap.status === "playing" && incoming) {
       if (newCompletedVazas > prevCompletedVazas) {
         sounds.playPlay();
       } else if (newPlays > prevPlays) {
         sounds.playPlay();
       } else if (
-        snap.view.handCards.length === 3 &&
+        view &&
+        view.handCards.length === 3 &&
         (prevView?.handCards.length ?? 0) < 3
       ) {
         sounds.playDeal();
@@ -366,7 +398,7 @@ export const useStore = create<StoreState>()((set, get) => {
       status: snap.status,
       connectedPlayers: snap.connectedPlayers,
       metadata: snap.metadata,
-      view: snap.view ?? null,
+      view,
       events: snap.events ?? [],
       // Mantém o que já tem se o snapshot não trouxer log.
       log: snap.log ?? get().log,
@@ -389,7 +421,12 @@ export const useStore = create<StoreState>()((set, get) => {
     processingQueue = true;
     let snap: SnapshotMessage | undefined;
     while ((snap = snapshotQueue.shift())) {
-      applySnapshot(snap);
+      const prevView = get().view;
+      const deferNextHand = prevView != null && isNextHandSnapshot(snap.events);
+      applySnapshot(
+        snap,
+        deferNextHand ? viewUntilNextHand(prevView, snap.view) : undefined,
+      );
 
       const vazaEvent = snap.events?.find((e) => e.type === "vazaCompleted");
       const handEvent = snap.events?.find((e) => e.type === "handFinished");
@@ -425,6 +462,11 @@ export const useStore = create<StoreState>()((set, get) => {
           await hold(holdMs);
           set({ banner: null });
         }
+      }
+
+      if (deferNextHand) {
+        applySnapshot(snap);
+        set({ banner: null });
       }
 
       if (snap.status === "finished") {
