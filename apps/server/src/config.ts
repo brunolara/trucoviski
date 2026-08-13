@@ -78,13 +78,13 @@ export const trucoConfig = defineServer({
         contentSecurityPolicy: {
           useDefaults: false,
           directives: {
-            baseSrc: ["'self'"],
+            baseUri: ["'self'"],
             defaultSrc: ["'self'"],
-            fontSrc: ["'self'", "data:"],
-            imgSrc: ["'self'", "data:"],
+            fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+            imgSrc: ["'self'", "data:", "https://api.dicebear.com"],
             objectSrc: ["'none'"],
             scriptSrc: ["'self'"],
-            styleSrc: ["'self'"],
+            styleSrc: ["'self'", "https://fonts.googleapis.com"],
             connectSrc: [
               "'self'",
               "wss://truco.brunodelara.dev",
