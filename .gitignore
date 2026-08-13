@@ -1,4 +1,6 @@
 node_modules/
+.pnpm-store/
+.pi-subagents/
 dist/
 .turbo/
 coverage/
