@@ -6,6 +6,7 @@ test-results
 playwright-report
 dev-dist
 .opencode
+.pi/
 mock-v2/
 .venv/
 data/

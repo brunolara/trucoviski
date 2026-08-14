@@ -1,0 +1,80 @@
+{
+  "winner": {
+    "topAliveAccept": true,
+    "wonFirstVazaMode": "override",
+    "scoreSensitive": true,
+    "opponentWeaknessBluff": true,
+    "generalizedPartnerDiscard": true,
+    "cangaOnPurpose": true,
+    "sharpness": 80,
+    "responseBaseOffset": 3.5,
+    "proposeBaseOffset": 3.5,
+    "elevenNeedsPair": true,
+    "positionAware": true,
+    "raiseGuard": true,
+    "distanceToTwelve": true,
+    "softOverrides": true,
+    "topTwoStrength": true,
+    "hiddenCardOutsideFerro": false,
+    "openingProfile": true,
+    "rngTieBreak": true,
+    "ferroRandomIndex": true,
+    "winMargin": false,
+    "partnerFolgaDiscard": false,
+    "twelveScoreBalance": true,
+    "vazaPlanning": true,
+    "elevenPairFloor": 9,
+    "positionBeatsBonus": 0.02,
+    "positionInfoBonus": 0.04,
+    "raiseGuardMaxLevel": 6,
+    "distDangerWeight": 0.04,
+    "distFinishWeight": 0.12,
+    "runCostWeight": 0.14,
+    "softTopAliveBonus": 0.35,
+    "softWonFirstBonus": 0.45
+  },
+  "confirmedMean": 0.586890625,
+  "confirmedWorst": 0.562,
+  "baseConfMean": 0.581296875,
+  "baseConfWorst": 0.541125,
+  "deltaMean": 0.5593749999999953,
+  "deltaWorst": 2.087500000000009,
+  "ablation": [
+    {
+      "flag": "elevenNeedsPair",
+      "delta": 0.765624999999992,
+      "meanWr": 0.5811875000000001
+    },
+    {
+      "flag": "positionAware",
+      "delta": 0.7281250000000017,
+      "meanWr": 0.5815625
+    },
+    {
+      "flag": "raiseGuard",
+      "delta": 1.2906250000000008,
+      "meanWr": 0.5759375
+    },
+    {
+      "flag": "distanceToTwelve",
+      "delta": 2.315624999999999,
+      "meanWr": 0.5656875
+    },
+    {
+      "flag": "softOverrides",
+      "delta": 0.05312499999999831,
+      "meanWr": 0.5883125
+    },
+    {
+      "flag": "topTwoStrength",
+      "delta": 1.0906250000000006,
+      "meanWr": 0.5779375
+    },
+    {
+      "flag": "twelveScoreBalance",
+      "delta": 0.6750000000000034,
+      "meanWr": 0.58209375
+    }
+  ],
+  "elapsedSec": 1645.766894345
+}

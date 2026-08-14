@@ -4,48 +4,16 @@
 /*  Arena de medição: pita duas políticas e reporta winrate + diagnóstico. */
 /* ------------------------------------------------------------------ */
 
-import { createPRNG, runArena } from "../packages/engine/src/index.js";
-import type { Action, PlayerView } from "../packages/engine/src/index.js";
-import {
-  decideHeuristicAction,
-  decideHeuristicV2Action,
-  decideHeuristicV3Action,
-  decideMonteCarloAction,
-  DEFAULT_FEATURES,
-  V3_FEATURES,
-} from "../packages/bots/src/index.js";
+import { runArena } from "../packages/engine/src/index.js";
 import type { HeuristicV2Features } from "../packages/bots/src/index.js";
-
-type PolicyName =
-  "random" | "heuristic-v1" | "heuristic-v2" | "heuristic-v3" | "montecarlo";
-
-const SEED_BLOCKS = {
-  train: 42,
-  test: 1_000_003,
-} as const;
-
-function makePolicy(
-  name: PolicyName,
-  botSeed: number,
-  features?: HeuristicV2Features,
-): (view: PlayerView) => Action | null {
-  const botRng = createPRNG(botSeed);
-  const rng = () => botRng.next();
-  switch (name) {
-    case "random":
-      return () => null;
-    case "heuristic-v1":
-      return decideHeuristicAction;
-    case "heuristic-v2":
-      return (view) =>
-        decideHeuristicV2Action(view, rng, features ?? DEFAULT_FEATURES);
-    case "heuristic-v3":
-      return (view) =>
-        decideHeuristicV3Action(view, rng, features ?? V3_FEATURES);
-    case "montecarlo":
-      return (view) => decideMonteCarloAction(view, { rng });
-  }
-}
+import { DEFAULT_FEATURES } from "../packages/bots/src/index.js";
+import {
+  SEED_BLOCKS,
+  assertSeedBlockAllowed,
+  makePolicy,
+  type PolicyName,
+  type SeedBlock,
+} from "./bot-policies.mts";
 
 function parseArgv(argv: string[]) {
   const args: Record<string, string> = {};
@@ -70,11 +38,16 @@ function parseFeatures(
   return { ...DEFAULT_FEATURES, ...partial };
 }
 
+function pct(x: number): string {
+  return `${(x * 100).toFixed(2)}%`;
+}
+
 const args = parseArgv(process.argv.slice(2));
 const a = (args.a ?? "heuristic-v2") as PolicyName;
 const b = (args.b ?? "heuristic-v1") as PolicyName;
 const games = parseInt(args.games ?? "2000", 10);
-const seedBlock = (args["seed-block"] ?? "train") as keyof typeof SEED_BLOCKS;
+const seedBlock = (args["seed-block"] ?? "train") as SeedBlock;
+assertSeedBlockAllowed(seedBlock, args["unlock-holdout"] === "true");
 const seed = parseInt(
   args.seed ?? String(SEED_BLOCKS[seedBlock] ?? SEED_BLOCKS.train),
   10,
@@ -98,6 +71,7 @@ const result = runArena({
 });
 const elapsed = ((performance.now() - start) / 1000).toFixed(2);
 const d = result.diagnostics;
+const ci = result.winRateTeam0CI95;
 
 console.log(
   `\nConcluído em ${elapsed}s (${result.gamesPerSecond.toFixed(0)} partidas/s)`,
@@ -106,11 +80,12 @@ console.log(`  Seeds:        ${result.games}`);
 console.log(`  Partidas:     ${result.matchesPlayed}`);
 console.log(`  Completados:  ${result.completed}`);
 console.log(`  Timed out:    ${result.timedOut}`);
+console.log(`  ${a} (A):    ${result.team0Wins} (${pct(result.winRateTeam0)})`);
 console.log(
-  `  ${a} (A):    ${result.team0Wins} (${(result.winRateTeam0 * 100).toFixed(2)}%)`,
+  `  ${b} (B):    ${result.team1Wins} (${pct(1 - result.winRateTeam0)})`,
 );
 console.log(
-  `  ${b} (B):    ${result.team1Wins} (${((1 - result.winRateTeam0) * 100).toFixed(2)}%)`,
+  `  IC95% pareado: ${pct(ci.lo)} – ${pct(ci.hi)}  (n=${ci.n} seeds)`,
 );
 console.log(`\nDiagnóstico:`);
 console.log(`  Fechamentos por valor: ${JSON.stringify(d.closingHandValues)}`);
@@ -121,10 +96,18 @@ console.log(
 console.log(
   `  Onze jogada e perdida — A: ${d.policy0ElevenPlayedAndLost} | B: ${d.policy1ElevenPlayedAndLost}`,
 );
-console.log(`  Pontos via run: ${d.pointsFromRun}`);
-console.log(`  Accept por nível: ${JSON.stringify(d.trucoAcceptByLevel)}`);
-console.log(`  Run por nível: ${JSON.stringify(d.trucoRunByLevel)}`);
-console.log(`  Raise por nível: ${JSON.stringify(d.trucoRaiseByLevel)}`);
+console.log(
+  `  Pontos via run — A: ${d.policy0PointsFromRun} | B: ${d.policy1PointsFromRun}`,
+);
+console.log(
+  `  Accept A: ${JSON.stringify(d.policy0TrucoAcceptByLevel)} | B: ${JSON.stringify(d.policy1TrucoAcceptByLevel)}`,
+);
+console.log(
+  `  Run A: ${JSON.stringify(d.policy0TrucoRunByLevel)} | B: ${JSON.stringify(d.policy1TrucoRunByLevel)}`,
+);
+console.log(
+  `  Raise A: ${JSON.stringify(d.policy0TrucoRaiseByLevel)} | B: ${JSON.stringify(d.policy1TrucoRaiseByLevel)}`,
+);
 
 if (result.errors.length > 0) {
   console.log(`\n  Erros:`);

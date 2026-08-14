@@ -104,7 +104,7 @@ describe("botAdvice", () => {
       ...baseView,
       mySeat: 2,
       trucoPendingTeam: 1,
-      trucoPendingValue: 6,
+      trucoPendingValue: 3,
       handCards: [
         { suit: "paus", rank: "5" },
         { suit: "copas", rank: "5" },

@@ -381,4 +381,84 @@ describe("Heuristic Bot v3", () => {
       expect(action?.type).not.toBe("truco");
     });
   });
+
+  describe("twelveScoreBalance (T7)", () => {
+    it("lowers threshold to accept when running loses the match anyway", () => {
+      const view: PlayerView = {
+        ...baseView,
+        scores: [0, 10], // opponent at 10; facing 12 (prev=9), oppScore+9 = 19 >= 12 -> running loses
+        trucoPendingTeam: 1,
+        trucoPendingValue: 12,
+        handCards: [
+          { suit: "copas", rank: "Q" },
+          { suit: "ouros", rank: "4" },
+        ],
+        legalActions: [
+          { type: "truco", action: "accept" },
+          { type: "truco", action: "run" },
+        ],
+      };
+      const on = decideHeuristicV3Action(
+        view,
+        midRng,
+        withFlags({ twelveScoreBalance: true, responseBaseOffset: 2 }),
+      );
+      const off = decideHeuristicV3Action(
+        view,
+        midRng,
+        withFlags({ twelveScoreBalance: false, responseBaseOffset: 2 }),
+      );
+      expect(on).not.toEqual(off);
+      expect(on).toEqual({ type: "truco", action: "accept" });
+      expect(off).toEqual({ type: "truco", action: "run" });
+    });
+  });
+
+  describe("vazaPlanning (E3)", () => {
+    it("opens with manilha when holding two top alive cards (planning route)", () => {
+      const zap: Card = { suit: "paus", rank: "5" };
+      const copas: Card = { suit: "copas", rank: "5" };
+      const four: Card = { suit: "ouros", rank: "4" };
+      const view: PlayerView = {
+        ...baseView,
+        handCards: [four, copas, zap],
+        legalActions: [
+          { type: "playCard", card: four },
+          { type: "playCard", card: copas },
+          { type: "playCard", card: zap },
+        ],
+      };
+      const action = decideHeuristicV3Action(view, midRng);
+      expect(action?.type).toBe("playCard");
+      if (action?.type === "playCard") {
+        expect(action.card.rank).toBe("5"); // Copas or Zap
+      }
+    });
+
+    it("discards weakest card when partner leads with lock card", () => {
+      const zap: Card = { suit: "paus", rank: "5" };
+      const four: Card = { suit: "ouros", rank: "4" };
+      const three: Card = { suit: "copas", rank: "3" };
+      const view: PlayerView = {
+        ...baseView,
+        currentVaza: {
+          plays: [
+            null,
+            { suit: "espadas", rank: "7" },
+            zap,
+            { suit: "copas", rank: "Q" },
+          ],
+          covered: [false, false, false, false],
+          currentSeat: 0,
+        },
+        handCards: [four, three],
+        legalActions: [
+          { type: "playCard", card: four },
+          { type: "playCard", card: three },
+        ],
+      };
+      const action = decideHeuristicV3Action(view, midRng);
+      expect(action).toEqual({ type: "playCard", card: four });
+    });
+  });
 });

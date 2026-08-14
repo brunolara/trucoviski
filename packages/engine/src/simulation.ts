@@ -170,12 +170,18 @@ export interface ArenaDiagnostics {
   policy0ElevenPlayedAndLost: number;
   /** Mãos de onze jogadas (play) e perdidas pela política B. */
   policy1ElevenPlayedAndLost: number;
-  /** Accept/run/raise contados pelo valor pendente/atingido. */
-  trucoAcceptByLevel: Record<number, number>;
-  trucoRunByLevel: Record<number, number>;
-  trucoRaiseByLevel: Record<number, number>;
-  /** Soma de tentos entregues por corrida (truco run + eleven run). */
-  pointsFromRun: number;
+  /** Accept/run/raise da política A, pelo valor pendente/atingido. */
+  policy0TrucoAcceptByLevel: Record<number, number>;
+  policy0TrucoRunByLevel: Record<number, number>;
+  policy0TrucoRaiseByLevel: Record<number, number>;
+  /** Accept/run/raise da política B, pelo valor pendente/atingido. */
+  policy1TrucoAcceptByLevel: Record<number, number>;
+  policy1TrucoRunByLevel: Record<number, number>;
+  policy1TrucoRaiseByLevel: Record<number, number>;
+  /** Tentos que a política A recebeu porque o oponente correu. */
+  policy0PointsFromRun: number;
+  /** Tentos que a política B recebeu porque o oponente correu. */
+  policy1PointsFromRun: number;
 }
 
 export interface ArenaResult {
@@ -191,6 +197,11 @@ export interface ArenaResult {
   team1Wins: number;
   /** Taxa de vitória da policyTeam0 entre os jogos completados (0..1). */
   winRateTeam0: number;
+  /**
+   * IC95% de winRateTeam0. Unidade = seed (par espelhado se mirrored),
+   * não cada partida.
+   */
+  winRateTeam0CI95: { lo: number; hi: number; n: number };
   errors: string[];
   mirrored: boolean;
   elapsedMs: number;
@@ -206,11 +217,35 @@ function emptyDiagnostics(): ArenaDiagnostics {
     policy1LossesOnBigHand: 0,
     policy0ElevenPlayedAndLost: 0,
     policy1ElevenPlayedAndLost: 0,
-    trucoAcceptByLevel: {},
-    trucoRunByLevel: {},
-    trucoRaiseByLevel: {},
-    pointsFromRun: 0,
+    policy0TrucoAcceptByLevel: {},
+    policy0TrucoRunByLevel: {},
+    policy0TrucoRaiseByLevel: {},
+    policy1TrucoAcceptByLevel: {},
+    policy1TrucoRunByLevel: {},
+    policy1TrucoRaiseByLevel: {},
+    policy0PointsFromRun: 0,
+    policy1PointsFromRun: 0,
   };
+}
+
+/** IC95% pela média das taxas por seed (0, 0.5 ou 1 quando espelhado). */
+export function ci95FromRates(rates: readonly number[]): {
+  lo: number;
+  hi: number;
+  n: number;
+} {
+  const n = rates.length;
+  if (n === 0) return { lo: 0, hi: 1, n: 0 };
+  const mean = rates.reduce((a, x) => a + x, 0) / n;
+  if (n < 2) return { lo: 0, hi: 1, n };
+  let ss = 0;
+  for (const x of rates) {
+    const d = x - mean;
+    ss += d * d;
+  }
+  const se = Math.sqrt(ss / (n * (n - 1)));
+  const z = 1.96;
+  return { lo: mean - z * se, hi: mean + z * se, n };
 }
 
 function bump(map: Record<number, number>, key: number): void {
@@ -249,6 +284,7 @@ export function runArena(config: ArenaConfig): ArenaResult {
   let team1Wins = 0;
   const errors: string[] = [];
   let matchesPlayed = 0;
+  const pairRates: number[] = [];
 
   const orientations: Array<{
     p0: BotPolicy;
@@ -264,6 +300,8 @@ export function runArena(config: ArenaConfig): ArenaResult {
 
   for (let g = 0; g < games; g++) {
     const gameSeed = seed + g;
+    let pairPolicy0Wins = 0;
+    let pairCompleted = 0;
     for (const ori of orientations) {
       matchesPlayed++;
       const outcome = runSingleMatch({
@@ -285,8 +323,16 @@ export function runArena(config: ArenaConfig): ArenaResult {
       const policy0Won = ori.policy0IsSeat0
         ? outcome.seatWinner === 0
         : outcome.seatWinner === 1;
-      if (policy0Won) team0Wins++;
-      else team1Wins++;
+      if (policy0Won) {
+        team0Wins++;
+        pairPolicy0Wins++;
+      } else {
+        team1Wins++;
+      }
+      pairCompleted++;
+    }
+    if (pairCompleted > 0) {
+      pairRates.push(pairPolicy0Wins / pairCompleted);
     }
   }
 
@@ -299,6 +345,7 @@ export function runArena(config: ArenaConfig): ArenaResult {
     team0Wins,
     team1Wins,
     winRateTeam0: completed > 0 ? team0Wins / completed : 0,
+    winRateTeam0CI95: ci95FromRates(pairRates),
     errors,
     mirrored,
     elapsedMs,
@@ -407,19 +454,28 @@ function runSingleMatch(args: {
       decided ??
       view.legalActions[fallbackRng.nextInt(view.legalActions.length)]!;
 
-    // Contagem de truco pela ação escolhida (antes do dispatch)
+    // Contagem de truco pela ação escolhida, atribuída à política do ator
     if (action.type === "truco") {
       const level =
         view.trucoPendingValue ??
         (action.action === "raise"
           ? nextPendingTruco(view.trucoValue, ruleset)
           : view.trucoValue);
-      if (action.action === "accept")
-        bump(diagnostics.trucoAcceptByLevel, level);
-      else if (action.action === "run")
-        bump(diagnostics.trucoRunByLevel, level);
-      else if (action.action === "raise")
-        bump(diagnostics.trucoRaiseByLevel, level);
+      const actorIsPolicy0 = policy0IsSeat0
+        ? TEAMS[actor.seat] === 0
+        : TEAMS[actor.seat] === 1;
+      const accept = actorIsPolicy0
+        ? diagnostics.policy0TrucoAcceptByLevel
+        : diagnostics.policy1TrucoAcceptByLevel;
+      const run = actorIsPolicy0
+        ? diagnostics.policy0TrucoRunByLevel
+        : diagnostics.policy1TrucoRunByLevel;
+      const raise = actorIsPolicy0
+        ? diagnostics.policy0TrucoRaiseByLevel
+        : diagnostics.policy1TrucoRaiseByLevel;
+      if (action.action === "accept") bump(accept, level);
+      else if (action.action === "run") bump(run, level);
+      else if (action.action === "raise") bump(raise, level);
     }
 
     const result = match.dispatch(actor.seat, action);
@@ -444,7 +500,13 @@ function runSingleMatch(args: {
         } else {
           lastHandElevenPlayed = null;
         }
-        if (ev.reason === "run") diagnostics.pointsFromRun += ev.tentos;
+        if (ev.reason === "run") {
+          const winnerIsPolicy0 = policy0IsSeat0
+            ? ev.winnerTeam === 0
+            : ev.winnerTeam === 1;
+          if (winnerIsPolicy0) diagnostics.policy0PointsFromRun += ev.tentos;
+          else diagnostics.policy1PointsFromRun += ev.tentos;
+        }
         elevenTeamThisHand = null;
         elevenPlayedThisHand = false;
       }

@@ -194,7 +194,10 @@ describe("Lobby startGame + swapSeats", () => {
 
     // Move Outro (seat 1) para seat 3 — buraco em 1.
     owner.raw.send("swapSeats", { a: 1, b: 3 });
-    await waitForInQueue(owner, "snapshot");
+    await Promise.all([
+      waitForInQueue(owner, "snapshot"),
+      waitForInQueue(other, "snapshot"),
+    ]);
     drainAll(owner);
     drainAll(other);
 
