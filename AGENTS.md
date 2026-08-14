@@ -23,6 +23,7 @@ HTTP e WebSocket em loopback `127.0.0.1:2568`. Não inicie F7 ou novos slices.
 - Empate da primeira vaza é decidido pela segunda.
 - Empate das duas primeiras vazas é decidido pela terceira.
 - Canga tripla vence para o time do jogador mão.
+- Empate na 3ª vaza após 1–1 vence para o time do jogador mão.
 
 ## Regras de truco (implementadas na F1)
 

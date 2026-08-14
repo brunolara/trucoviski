@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* ------------------------------------------------------------------ */
 /*  Planning – Planejamento curto de vazas (rota de vitória da mão)    */
-/*  Avalia P(ganhar a mão) para cada carta candidata.                  */
+/*  Avalia um score de rota para cada carta candidata (não é P(win)).  */
 /* ------------------------------------------------------------------ */
 
 import {
@@ -23,6 +23,7 @@ import type {
 import {
   cardKey,
   collectSeenCards,
+  equalCardsRemaining,
   getCardStrength,
   myTeam,
   partnerSeatOf,
@@ -58,14 +59,37 @@ export function probHasStronger(
   unseenTotal: number,
   numCards: number,
 ): number {
-  if (stronger <= 0 || numCards <= 0 || unseenTotal <= 0) return 0;
-  const nonStronger = unseenTotal - stronger;
-  if (nonStronger < numCards) return 1;
-  let pNone = 1;
-  for (let i = 0; i < numCards; i++) {
-    pNone *= (nonStronger - i) / (unseenTotal - i);
+  return 1 - hypergeomNone(stronger, unseenTotal, numCards);
+}
+
+/** P(0 cartas de `special` em `draws` retiradas de `total`). */
+function hypergeomNone(special: number, total: number, draws: number): number {
+  if (draws <= 0 || total <= 0 || special <= 0) return 1;
+  const other = total - special;
+  if (other < draws) return 0;
+  let p = 1;
+  for (let i = 0; i < draws; i++) {
+    p *= (other - i) / (total - i);
   }
-  return Math.max(0, Math.min(1, 1 - pNone));
+  return Math.max(0, Math.min(1, p));
+}
+
+/**
+ * P(vaza) contra `numCards` cartas ainda não vistas, dado o líder atual.
+ * Empate só existe entre não-manilhas de mesmo rank (`equal`).
+ */
+function remainingWinLoseTie(
+  stronger: number,
+  equal: number,
+  unseenTotal: number,
+  numCards: number,
+): { pWin: number; pLose: number; pTie: number } {
+  const pNoStronger = hypergeomNone(stronger, unseenTotal, numCards);
+  const pAllWeaker = hypergeomNone(stronger + equal, unseenTotal, numCards);
+  const pLose = 1 - pNoStronger;
+  const pTie = Math.max(0, pNoStronger - pAllWeaker);
+  const pWin = Math.max(0, 1 - pLose - pTie);
+  return { pWin, pLose, pTie };
 }
 
 /** Cartas do baralho ainda não observadas, sem contar duplicatas. */
@@ -200,14 +224,16 @@ export function resolveVazaOutcomeProbabilities(
   if (leader.type === "team" && leader.team === team) {
     const numOppCards = oppsAfter.length * cardsPerPlayer;
     const stronger = strongerCardsRemaining(tableBest, view.vira, seen);
-    const pOppBeats = probHasStronger(stronger, unseenTotal, numOppCards);
+    const equal = equalCardsRemaining(tableBest, view.vira, seen);
+    const vsOpp = remainingWinLoseTie(
+      stronger,
+      equal,
+      unseenTotal,
+      numOppCards,
+    );
 
     if (!partnerAfter) {
-      return {
-        pWin: 1 - pOppBeats,
-        pLose: pOppBeats,
-        pTie: 0,
-      };
+      return vsOpp;
     }
 
     const myCardStrength = getCardStrength(tableBest, view.vira);
@@ -220,12 +246,10 @@ export function resolveVazaOutcomeProbabilities(
     );
     const pPartnerSaves =
       probHasStronger(partnerStronger, unseenTotal, cardsPerPlayer) * 0.35;
-    const pWin = Math.min(1, 1 - pOppBeats + pOppBeats * pPartnerSaves);
-    return {
-      pWin,
-      pLose: 1 - pWin,
-      pTie: 0,
-    };
+    const pLose = vsOpp.pLose * (1 - pPartnerSaves);
+    const pWin = Math.min(1, vsOpp.pWin + vsOpp.pLose * pPartnerSaves);
+    const pTie = Math.max(0, 1 - pWin - pLose);
+    return { pWin, pLose, pTie };
   }
 
   // Caso 3: Oponente está liderando a mesa
@@ -234,17 +258,18 @@ export function resolveVazaOutcomeProbabilities(
       return { pWin: 0, pLose: 1, pTie: 0 };
     }
     const stronger = strongerCardsRemaining(tableBest, view.vira, seen);
-    const pPartnerBeats = probHasStronger(
+    const equal = equalCardsRemaining(tableBest, view.vira, seen);
+    const vsPartner = remainingWinLoseTie(
       stronger,
+      equal,
       unseenTotal,
       cardsPerPlayer,
     );
-    const pWin = pPartnerBeats * (oppsAfter.length > 0 ? 0.45 : 0.85);
-    return {
-      pWin,
-      pLose: 1 - pWin,
-      pTie: 0,
-    };
+    const factor = oppsAfter.length > 0 ? 0.45 : 0.85;
+    const pWin = vsPartner.pLose * factor;
+    const pTie = vsPartner.pTie * factor;
+    const pLose = Math.max(0, 1 - pWin - pTie);
+    return { pWin, pLose, pTie };
   }
 
   // Caso 4: Mesa empatada com oponente
@@ -451,7 +476,8 @@ function secondVazaOutcome(view: PlayerView): VazaOutcome {
 }
 
 /**
- * Avalia a probabilidade esperada de vitória da mão se o jogador jogar `candidateCard`.
+ * Score heurístico da rota se o jogador jogar `candidateCard`.
+ * Não é P(ganhar a mão): soma probabilidade estimada com bônus táticos.
  */
 export function evaluateCardRoute(
   candidateCard: Card,
@@ -525,25 +551,23 @@ export function evaluateCardRoute(
     }
   }
 
-  // Na 2ª vaza após perder a 1ª: superar a carta do oponente na mesa é imperativo
+  // Na 2ª vaza após perder a 1ª: superar a carta do oponente (não a do parceiro)
   const plays = view.currentVaza?.plays ?? EMPTY_PLAYS;
-  let bestTableCard: Card | null = null;
-  for (let s = 0; s < 4; s++) {
-    if (plays[s]) {
-      if (
-        !bestTableCard ||
-        compareCards(plays[s]!, bestTableCard, view.vira, RANKS, SUITS) > 0
-      ) {
-        bestTableCard = plays[s]!;
-      }
-    }
-  }
+  const leaderBefore = partialVazaLeader(
+    plays,
+    null,
+    view.vira,
+    view.dealerSeat,
+    RANKS,
+    SUITS,
+  );
 
   if (
     vazaIndex === 1 &&
     firstVazaOutcome(view) === "lost" &&
-    bestTableCard &&
-    compareCards(candidateCard, bestTableCard, view.vira, RANKS, SUITS) > 0
+    leaderBefore &&
+    (leaderBefore.type === "tie" || leaderBefore.team !== team) &&
+    compareCards(candidateCard, leaderBefore.card, view.vira, RANKS, SUITS) > 0
   ) {
     bonus += 0.2;
   }
@@ -551,8 +575,8 @@ export function evaluateCardRoute(
   // Na 3ª vaza: se a carta vence a mesa, prioriza vencer com a mínima suficiente
   if (
     vazaIndex === 2 &&
-    bestTableCard &&
-    compareCards(candidateCard, bestTableCard, view.vira, RANKS, SUITS) > 0
+    leaderBefore &&
+    compareCards(candidateCard, leaderBefore.card, view.vira, RANKS, SUITS) > 0
   ) {
     bonus += 0.5;
   }

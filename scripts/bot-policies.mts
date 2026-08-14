@@ -16,7 +16,8 @@ import type { HeuristicV2Features } from "../packages/bots/src/index.js";
 
 /**
  * Blocos de seed. `test` foi contaminado (calibrado na F3–F5) e passou a ser
- * mais um bloco de treino. `holdout` nunca é consultado até E5.
+ * mais um bloco de treino. `holdout` abriu uma vez no fim da E5. `holdout-2`
+ * é o holdout cego pós-correção do planner; não reabrir `holdout`.
  */
 export const SEED_BLOCKS = {
   train: 42,
@@ -24,10 +25,12 @@ export const SEED_BLOCKS = {
   "train-a": 2_000_003,
   "train-b": 3_000_003,
   holdout: 9_000_007,
+  "holdout-2": 11_000_013,
 } as const;
 
 export type SeedBlock = keyof typeof SEED_BLOCKS;
 export const HOLDOUT_BLOCK: SeedBlock = "holdout";
+export const HOLDOUT_BLOCKS: readonly SeedBlock[] = ["holdout", "holdout-2"];
 
 export const AGGRESSIVE_FEATURES: HeuristicV2Features = {
   ...V3_FEATURES,
@@ -92,9 +95,9 @@ export function assertSeedBlockAllowed(
   block: SeedBlock,
   unlockHoldout: boolean,
 ): void {
-  if (block === HOLDOUT_BLOCK && !unlockHoldout) {
+  if (HOLDOUT_BLOCKS.includes(block) && !unlockHoldout) {
     throw new Error(
-      "Bloco holdout bloqueado (E1). Só abre uma vez, no fim da E5. Passe --unlock-holdout se for mesmo isso.",
+      "Bloco holdout bloqueado. Passe --unlock-holdout se for mesmo isso.",
     );
   }
 }

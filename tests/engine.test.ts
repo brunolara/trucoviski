@@ -14,6 +14,7 @@ import {
   partialVazaLeader,
   PRNG_VERSION,
   paulista,
+  resolveHandWinner,
   resolveVaza,
   teamForSeat,
 } from "@trucoviski/engine";
@@ -445,6 +446,28 @@ describe("canga tripla", () => {
 
     expect(found, "expected canga tripla within 20000 seeds").toBe(true);
   }, 30000);
+});
+
+describe("resolveHandWinner", () => {
+  const plays = [null, null, null, null] as const;
+  const covered = [false, false, false, false] as const;
+
+  function vaza(winner: Seat | null) {
+    return {
+      plays,
+      covered,
+      winner,
+      tiedSeats: winner === null ? ([0, 1] as Seat[]) : [],
+    };
+  }
+
+  it("1–1 com canga na 3ª dá a mão ao time do mão", () => {
+    const vazas = [vaza(0), vaza(1), vaza(null)];
+    expect(resolveHandWinner(vazas, 0)).toBe(0);
+    expect(resolveHandWinner(vazas, 1)).toBe(1);
+    expect(resolveHandWinner(vazas, 2)).toBe(0);
+    expect(resolveHandWinner(vazas, 3)).toBe(1);
+  });
 });
 
 // ---- Cenário: empate na 1ª vaza -------------------------------------

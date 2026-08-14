@@ -112,6 +112,29 @@ export function strongerCardsRemaining(
   return strongerTable(vira)[myStrength]! - seenStronger;
 }
 
+/**
+ * Cartas de mesmo rank ainda não vistas. Manilhas desempatam por naipe, então
+ * nunca empatam: devolve 0.
+ */
+export function equalCardsRemaining(
+  card: Card,
+  vira: Card,
+  seenCards: readonly Card[],
+): number {
+  if (getCardStrength(card, vira) >= 10) return 0;
+  const myId = cardId(card);
+  const counted = new Set<number>();
+  let seenEqual = 0;
+  for (const c of seenCards) {
+    if (c.rank !== card.rank) continue;
+    const id = cardId(c);
+    if (id === myId || counted.has(id)) continue;
+    counted.add(id);
+    seenEqual++;
+  }
+  return Math.max(0, 3 - seenEqual);
+}
+
 export function myTeam(view: PlayerView): Team {
   return TEAMS[view.mySeat];
 }

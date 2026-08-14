@@ -213,3 +213,87 @@ describe("planner: cartas próprias não saem de novo do unseen", () => {
     expect(countUnseenCards([...seen, first])).toBe(unseen);
   });
 });
+
+describe("planner: canga futura por mesmo rank", () => {
+  function lastVazaOurLead(card: Card): PlayerView {
+    return view({
+      handCards: [card],
+      legalActions: playActions([card]),
+      completedVazas: [completed(0), completed(1)],
+      currentVaza: {
+        plays: [null, C("Q", "copas"), C("7", "espadas"), null],
+        covered: [false, false, false, false],
+        currentSeat: 0,
+      },
+    });
+  }
+
+  it("A nosso + A adversário possível tem P(canga) > 0", () => {
+    const ace = C("A", "paus");
+    const p = probs(ace, lastVazaOurLead(ace));
+    // 1 oponente, 1 carta: 12 mais fortes (2, 3, manilha 5) e 3 As restantes em 36.
+    expect(p.pLose).toBeCloseTo(12 / 36);
+    expect(p.pTie).toBeCloseTo(3 / 36);
+    expect(p.pWin).toBeCloseTo(21 / 36);
+    expect(p.pWin + p.pLose + p.pTie).toBeCloseTo(1);
+  });
+
+  it("3 nosso + 3 adversário possível tem P(canga) > 0", () => {
+    const three = C("3", "paus");
+    const p = probs(three, lastVazaOurLead(three));
+    // Só manilhas superam o 3; restam 3 três.
+    expect(p.pLose).toBeCloseTo(4 / 36);
+    expect(p.pTie).toBeCloseTo(3 / 36);
+    expect(p.pWin).toBeCloseTo(29 / 36);
+  });
+
+  it("manilha nossa não pode empatar", () => {
+    const ouro = C("5", "ouros");
+    const p = probs(ouro, lastVazaOurLead(ouro));
+    expect(p.pTie).toBe(0);
+    expect(p.pLose).toBeCloseTo(3 / 36);
+    expect(p.pWin).toBeCloseTo(33 / 36);
+  });
+
+  it("parceiro ainda joga: carta igual à do oponente pode empatar", () => {
+    const four = C("4", "ouros");
+    const v = view({
+      handCards: [four],
+      legalActions: playActions([four]),
+      completedVazas: [completed(0), completed(1)],
+      currentVaza: {
+        plays: [null, C("A", "copas"), null, C("7", "paus")],
+        covered: [false, false, false, false],
+        currentSeat: 0,
+      },
+    });
+    const p = probs(four, v);
+    expect(p.pTie).toBeGreaterThan(0);
+    expect(p.pWin + p.pLose + p.pTie).toBeCloseTo(1);
+  });
+});
+
+describe("planner: bônus de superar oponente", () => {
+  it("perdeu a 1ª, parceiro ganhando a 2ª: não ganha bônus por superar o parceiro", () => {
+    const seven = C("7", "ouros");
+    const jack = C("J", "ouros");
+    const v = view({
+      dealerSeat: 3,
+      handCards: [seven, jack],
+      legalActions: playActions([seven, jack]),
+      completedVazas: [completed(1)],
+      currentVaza: {
+        plays: [null, C("4", "copas"), C("Q", "copas"), C("6", "paus")],
+        covered: [false, false, false, false],
+        currentSeat: 0,
+      },
+    });
+    const action = decidePlannedCardAction(
+      v,
+      playActions([seven, jack]),
+      V3_FEATURES,
+      midRng,
+    );
+    expect(action).toEqual({ type: "playCard", card: seven });
+  });
+});

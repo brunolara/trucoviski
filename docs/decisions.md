@@ -54,6 +54,9 @@ Fora de escopo: turn timer, tratamento de AFK, badge visual de bot.
   dealerSeat).
 - Empate das duas primeiras vazas: a terceira vaza decide.
 - Canga tripla: vence o time do jogador mão.
+- Empate na 3ª vaza após 1–1 (cada time venceu uma): vence o time do jogador mão
+  — a mesma regra da canga tripla (`resolveHandWinner`: placar igualado após 3
+  vazas). Não se usa o vencedor da 1ª vaza.
 - Empate de não-manilhas de mesmo rank: canga independentemente do naipe.
 
 ## Regras de truco (implementadas na F1)
