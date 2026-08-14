@@ -193,15 +193,19 @@ function printLeague(result: LeagueResult): void {
     list.push(c);
     cellsByPair.set(key, list);
   }
-  console.log("\nConfrontos (média dos blocos, IC do primeiro bloco):");
+  console.log("\nConfrontos (média dos blocos; IC95 de cada bloco):");
   for (const [key, list] of cellsByPair) {
-    const first = list[0];
-    if (first === undefined || list.length === 0) continue;
+    if (list.length === 0) continue;
     const mean = list.reduce((s, c) => s + c.winRate, 0) / list.length;
     const worst = list.reduce((w, c) => (c.winRate < w.winRate ? c : w));
     console.log(
-      `  ${key.replace("|", " vs ")}: média ${pct(mean)}  pior ${pct(worst.winRate)} (${worst.block})  IC95 ${pct(first.ciLo)}–${pct(first.ciHi)} n=${first.n}`,
+      `  ${key.replace("|", " vs ")}: média ${pct(mean)}  pior ${pct(worst.winRate)} (${worst.block})`,
     );
+    for (const c of list) {
+      console.log(
+        `    ${c.block}: ${pct(c.winRate)}  IC95 ${pct(c.ciLo)}–${pct(c.ciHi)} n=${c.n}`,
+      );
+    }
   }
 }
 

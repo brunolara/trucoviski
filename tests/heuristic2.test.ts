@@ -8,6 +8,7 @@ import {
 import {
   getCardStrength,
   strongerCardsRemaining,
+  strongerCardsRemainingThanStrength,
 } from "../packages/bots/src/strength.js";
 
 describe("Heuristic Bot v2 (F1+F2)", () => {
@@ -253,6 +254,23 @@ describe("strongerCardsRemaining", () => {
         }
       }
     }
+  });
+
+  it("limiar numérico não reconstrói a manilha a partir de RANKS", () => {
+    const viraA: Card = { suit: "paus", rank: "A" };
+    const seen = [viraA];
+    // 4 três (força 9) + 4 manilhas 2 (10–13) = 8 cartas > 8
+    expect(strongerCardsRemainingThanStrength(8, viraA, seen)).toBe(8);
+    const fakeTwo: Card = { rank: "2", suit: "ouros" };
+    expect(getCardStrength(fakeTwo, viraA)).toBe(10);
+    expect(strongerCardsRemaining(fakeTwo, viraA, seen)).toBe(3);
+
+    const viraTwo: Card = { suit: "paus", rank: "2" };
+    const copas: Card = { suit: "copas", rank: "3" };
+    expect(getCardStrength(copas, viraTwo)).toBe(12);
+    expect(
+      strongerCardsRemainingThanStrength(12, viraTwo, [viraTwo, copas]),
+    ).toBe(1);
   });
 });
 

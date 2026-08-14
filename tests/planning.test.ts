@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { Card, CompletedVaza, PlayerView, Seat } from "@trucoviski/engine";
-import { DECK_SIZE } from "@trucoviski/engine";
+import { DECK_SIZE, RANKS } from "@trucoviski/engine";
 import { V3_FEATURES } from "../packages/bots/src/heuristic2.js";
 import {
   countUnseenCards,
   decidePlannedCardAction,
   evaluateCardRoute,
+  partnerCardsAfterCurrentVaza,
   resolveVazaOutcomeProbabilities,
   splitWinLoseTie,
+  takePartnerCover,
+  unseenPartnerSaveProb,
 } from "../packages/bots/src/planning.js";
-import { collectSeenCards } from "../packages/bots/src/strength.js";
+import {
+  collectSeenCards,
+  getCardStrength,
+  strongerCardsRemaining,
+  strongerCardsRemainingThanStrength,
+} from "../packages/bots/src/strength.js";
 
 const VIRA: Card = { suit: "paus", rank: "4" }; // manilha = 5
 const midRng = () => 0.5;
@@ -361,5 +369,96 @@ describe("planner: mão de onze usa partnerCards conhecidas", () => {
     expect(evaluateCardRoute(seven, v, V3_FEATURES)).toBeGreaterThan(
       evaluateCardRoute(ace, v, V3_FEATURES),
     );
+  });
+});
+
+describe("planner: força do parceiro sem reconstruir rank", () => {
+  const threes: Card[] = [
+    C("3", "paus"),
+    C("3", "copas"),
+    C("3", "espadas"),
+    C("3", "ouros"),
+  ];
+
+  it("vira A: neededStrength 8 conta os 3s, não trata o 2 como manilha", () => {
+    const vira = C("A", "paus");
+    const king = C("K", "paus");
+    expect(getCardStrength(king, vira)).toBe(6);
+    const fakeTwo: Card = { rank: RANKS[8] ?? "2", suit: "ouros" };
+    expect(getCardStrength(fakeTwo, vira)).toBe(10);
+    expect(
+      strongerCardsRemainingThanStrength(8, vira, [vira, king]),
+    ).toBeGreaterThan(strongerCardsRemaining(fakeTwo, vira, [vira, king]));
+
+    const pBase = unseenPartnerSaveProb(king, vira, [vira, king], 30, 3);
+    const pThreesSeen = unseenPartnerSaveProb(
+      king,
+      vira,
+      [vira, king, ...threes],
+      30,
+      3,
+    );
+    expect(pThreesSeen).toBeLessThan(pBase);
+  });
+
+  it("vira 2: mesa com copas só tem o Zap como cobertura acima", () => {
+    const vira = C("2", "paus");
+    const copas = C("3", "copas");
+    const zap = C("3", "paus");
+    expect(getCardStrength(copas, vira)).toBe(12);
+    const p = unseenPartnerSaveProb(copas, vira, [vira, copas], 30, 1);
+    const pZapSeen = unseenPartnerSaveProb(
+      copas,
+      vira,
+      [vira, copas, zap],
+      30,
+      1,
+    );
+    expect(p).toBeGreaterThan(0);
+    expect(pZapSeen).toBe(0);
+  });
+});
+
+describe("planner: partnerCards não reutiliza a mesma carta", () => {
+  const zap = C("5", "paus");
+  const four = C("4", "ouros");
+  const six = C("6", "espadas");
+  const seven = C("7", "ouros");
+  const queen = C("Q", "paus");
+
+  it("um Zap cobre só uma vaza futura", () => {
+    const first = takePartnerCover([zap, four, six], 8, VIRA);
+    expect(first.helps).toBe(true);
+    expect(first.remaining).toEqual([four, six]);
+    const second = takePartnerCover(first.remaining, 8, VIRA);
+    expect(second.helps).toBe(false);
+  });
+
+  it("duas coberturas atendem duas vazas", () => {
+    const copas = C("5", "copas");
+    const first = takePartnerCover([zap, copas, four], 8, VIRA);
+    expect(first.helps).toBe(true);
+    const second = takePartnerCover(first.remaining, 8, VIRA);
+    expect(second.helps).toBe(true);
+    expect(second.remaining).toEqual([four]);
+  });
+
+  it("vaza atual que credita o Zap do parceiro remove essa carta do lookahead", () => {
+    const tableThree = C("3", "copas");
+    const v = view({
+      isElevenHand: true,
+      elevenDecision: "play",
+      scores: [11, 5],
+      partnerCards: [zap, four, six],
+      handCards: [seven, queen],
+      legalActions: playActions([seven, queen]),
+      completedVazas: [completed(1)],
+      currentVaza: {
+        plays: [null, null, null, tableThree],
+        covered: [false, true, false, false],
+        currentSeat: 0,
+      },
+    });
+    expect(partnerCardsAfterCurrentVaza(v, seven)).toEqual([four, six]);
   });
 });

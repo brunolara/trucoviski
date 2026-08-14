@@ -28,6 +28,7 @@ import {
   myTeam,
   partnerSeatOf,
   strongerCardsRemaining,
+  strongerCardsRemainingThanStrength,
 } from "./strength.js";
 import type { HeuristicV2Features, Rng } from "./heuristic2.js";
 
@@ -143,22 +144,102 @@ function knownPartnerCovers(view: PlayerView, tableBest: Card): boolean {
   return knownPartnerVs(view, tableBest)?.canBeat === true;
 }
 
-function unseenPartnerSaveProb(
+/**
+ * P(parceiro não visto salvar a vaza). O limiar é a força numérica
+ * (`max(carta, 8)`), não um rank reconstruído: com vira A o 2 é manilha
+ * (10–13), então `RANKS[8]` deixaria de representar força 8.
+ */
+export function unseenPartnerSaveProb(
   tableBest: Card,
   vira: Card,
   seen: readonly Card[],
   unseenTotal: number,
   numCards: number,
 ): number {
-  const myCardStrength = getCardStrength(tableBest, vira);
-  const neededStrength = Math.max(myCardStrength, 8);
-  const partnerThreatRank = RANKS[Math.min(9, neededStrength)] ?? "K";
-  const partnerStronger = strongerCardsRemaining(
-    { rank: partnerThreatRank, suit: "ouros" },
+  const neededStrength = Math.max(getCardStrength(tableBest, vira), 8);
+  const partnerStronger = strongerCardsRemainingThanStrength(
+    neededStrength,
     vira,
     seen,
   );
   return probHasStronger(partnerStronger, unseenTotal, numCards) * 0.35;
+}
+
+function sameCard(a: Card, b: Card): boolean {
+  return a.rank === b.rank && a.suit === b.suit;
+}
+
+function withoutCard(cards: readonly Card[], card: Card): Card[] {
+  let removed = false;
+  const out: Card[] = [];
+  for (const c of cards) {
+    if (!removed && sameCard(c, card)) {
+      removed = true;
+      continue;
+    }
+    out.push(c);
+  }
+  return out;
+}
+
+/**
+ * Consome a cobertura mais fraca que supera `neededStrength`.
+ * Cada carta do parceiro só pode ajudar uma vaza.
+ */
+export function takePartnerCover(
+  partnerCards: readonly Card[],
+  neededStrength: number,
+  vira: Card,
+): { helps: boolean; remaining: readonly Card[] } {
+  let cover: Card | null = null;
+  let coverStrength = Infinity;
+  for (const card of partnerCards) {
+    const s = getCardStrength(card, vira);
+    if (s > neededStrength && s < coverStrength) {
+      cover = card;
+      coverStrength = s;
+    }
+  }
+  if (cover === null) return { helps: false, remaining: partnerCards };
+  return { helps: true, remaining: withoutCard(partnerCards, cover) };
+}
+
+function leaderAfterPlay(view: PlayerView, candidateCard: Card) {
+  const plays = view.currentVaza?.plays ?? EMPTY_PLAYS;
+  return (
+    partialVazaLeader(
+      plays,
+      { seat: view.mySeat, card: candidateCard },
+      view.vira,
+      view.dealerSeat,
+      RANKS,
+      SUITS,
+    ) ?? { type: "tie" as const, card: candidateCard }
+  );
+}
+
+/**
+ * Carta do parceiro que `resolveVazaOutcomeProbabilities` usa como cobertura
+ * da vaza atual (`known.best`). Essa carta não pode reaparecer nas vazas futuras.
+ */
+export function partnerCardsAfterCurrentVaza(
+  view: PlayerView,
+  candidateCard: Card,
+): readonly Card[] | undefined {
+  const cards = view.partnerCards;
+  if (cards === undefined) return undefined;
+  if (!partnerStillToPlay(view)) return cards;
+  const leader = leaderAfterPlay(view, candidateCard);
+  const known = knownPartnerVs(view, leader.card);
+  if (!known?.best) return cards;
+  const team = myTeam(view);
+  const usesBest =
+    leader.type === "team" && leader.team === team
+      ? known.canBeat
+      : leader.type === "team" && leader.team !== team
+        ? known.canBeat || known.canTie
+        : known.canBeat;
+  return usesBest ? withoutCard(cards, known.best) : cards;
 }
 
 /** Cartas do baralho ainda não observadas, sem contar duplicatas. */
@@ -189,17 +270,17 @@ function probFutureCardWin(
   seen: readonly Card[],
   unseenTotal: number,
   partnerCards: readonly Card[] | undefined,
-): number {
+): { pWin: number; remainingPartnerCards: readonly Card[] | undefined } {
   const cardsInFuture = Math.max(1, 3 - fVazaIndex);
   const stronger = strongerCardsRemaining(card, vira, seen);
   const pOppBeats = probHasStronger(stronger, unseenTotal, 2 * cardsInFuture);
   const neededStrength = Math.max(getCardStrength(card, vira), 8);
   let pPartnerHelps: number;
+  let remainingPartnerCards = partnerCards;
   if (partnerCards !== undefined) {
-    const partnerHasCover = partnerCards.some(
-      (c) => getCardStrength(c, vira) > neededStrength,
-    );
-    pPartnerHelps = partnerHasCover ? 0.35 : 0;
+    const taken = takePartnerCover(partnerCards, neededStrength, vira);
+    pPartnerHelps = taken.helps ? 0.35 : 0;
+    remainingPartnerCards = taken.remaining;
   } else {
     pPartnerHelps = unseenPartnerSaveProb(
       card,
@@ -209,7 +290,10 @@ function probFutureCardWin(
       cardsInFuture,
     );
   }
-  return Math.max(0, Math.min(1, 1 - pOppBeats + pOppBeats * pPartnerHelps));
+  return {
+    pWin: Math.max(0, Math.min(1, 1 - pOppBeats + pOppBeats * pPartnerHelps)),
+    remainingPartnerCards,
+  };
 }
 
 function seatStillToPlay(view: PlayerView, seat: Seat): boolean {
@@ -268,16 +352,8 @@ export function resolveVazaOutcomeProbabilities(
   const team = myTeam(view);
   const vazaIndex = view.completedVazas.length;
   const cardsPerPlayer = Math.max(1, 3 - vazaIndex);
-  const plays = view.currentVaza?.plays ?? EMPTY_PLAYS;
 
-  const leader = partialVazaLeader(
-    plays,
-    { seat: mySeat, card: candidateCard },
-    view.vira,
-    view.dealerSeat,
-    RANKS,
-    SUITS,
-  ) ?? { type: "tie" as const, card: candidateCard };
+  const leader = leaderAfterPlay(view, candidateCard);
 
   const partnerSeat = partnerSeatOf(mySeat);
   const remainingSeats = remainingSeatsAfter(view, mySeat);
@@ -457,18 +533,17 @@ function evalFutureVaza2(
   unseenTotal: number,
   team: Team,
   dealerSeat: Seat,
+  partnerCards: readonly Card[] | undefined,
 ): number {
-  const p2 = splitWinLoseTie(
-    probFutureCardWin(
-      cardV2,
-      1,
-      view.vira,
-      seen,
-      unseenTotal,
-      view.partnerCards,
-    ),
-    FUTURE_VAZA_TIE_P,
+  const r2 = probFutureCardWin(
+    cardV2,
+    1,
+    view.vira,
+    seen,
+    unseenTotal,
+    partnerCards,
   );
+  const p2 = splitWinLoseTie(r2.pWin, FUTURE_VAZA_TIE_P);
   const p3 = splitWinLoseTie(
     probFutureCardWin(
       cardV3,
@@ -476,8 +551,8 @@ function evalFutureVaza2(
       view.vira,
       seen,
       unseenTotal,
-      view.partnerCards,
-    ),
+      r2.remainingPartnerCards,
+    ).pWin,
     FUTURE_VAZA_TIE_P,
   );
 
@@ -547,16 +622,11 @@ function handWinProbVaza2(
   unseenTotal: number,
   team: Team,
   dealerSeat: Seat,
+  partnerCards: readonly Card[] | undefined,
 ): number {
   const p3 = splitWinLoseTie(
-    probFutureCardWin(
-      remCard,
-      2,
-      view.vira,
-      seen,
-      unseenTotal,
-      view.partnerCards,
-    ),
+    probFutureCardWin(remCard, 2, view.vira, seen, unseenTotal, partnerCards)
+      .pWin,
     FUTURE_VAZA_TIE_P,
   );
 
@@ -746,6 +816,7 @@ export function evaluateCardRoute(
   const remaining = view.handCards.filter(
     (c) => !(c.rank === candidateCard.rank && c.suit === candidateCard.suit),
   );
+  const futurePartnerCards = partnerCardsAfterCurrentVaza(view, candidateCard);
 
   if (vazaIndex === 2) {
     const v1 = firstVazaOutcome(view);
@@ -779,6 +850,7 @@ export function evaluateCardRoute(
         unseenTotal,
         team,
         dealerSeat,
+        futurePartnerCards,
       )
     );
   }
@@ -788,16 +860,76 @@ export function evaluateCardRoute(
   const r2 = remaining[1] ?? r1;
 
   const evIfWon = Math.max(
-    evalFutureVaza2(r1, r2, "won", view, seen, unseenTotal, team, dealerSeat),
-    evalFutureVaza2(r2, r1, "won", view, seen, unseenTotal, team, dealerSeat),
+    evalFutureVaza2(
+      r1,
+      r2,
+      "won",
+      view,
+      seen,
+      unseenTotal,
+      team,
+      dealerSeat,
+      futurePartnerCards,
+    ),
+    evalFutureVaza2(
+      r2,
+      r1,
+      "won",
+      view,
+      seen,
+      unseenTotal,
+      team,
+      dealerSeat,
+      futurePartnerCards,
+    ),
   );
   const evIfLost = Math.max(
-    evalFutureVaza2(r1, r2, "lost", view, seen, unseenTotal, team, dealerSeat),
-    evalFutureVaza2(r2, r1, "lost", view, seen, unseenTotal, team, dealerSeat),
+    evalFutureVaza2(
+      r1,
+      r2,
+      "lost",
+      view,
+      seen,
+      unseenTotal,
+      team,
+      dealerSeat,
+      futurePartnerCards,
+    ),
+    evalFutureVaza2(
+      r2,
+      r1,
+      "lost",
+      view,
+      seen,
+      unseenTotal,
+      team,
+      dealerSeat,
+      futurePartnerCards,
+    ),
   );
   const evIfTied = Math.max(
-    evalFutureVaza2(r1, r2, "tied", view, seen, unseenTotal, team, dealerSeat),
-    evalFutureVaza2(r2, r1, "tied", view, seen, unseenTotal, team, dealerSeat),
+    evalFutureVaza2(
+      r1,
+      r2,
+      "tied",
+      view,
+      seen,
+      unseenTotal,
+      team,
+      dealerSeat,
+      futurePartnerCards,
+    ),
+    evalFutureVaza2(
+      r2,
+      r1,
+      "tied",
+      view,
+      seen,
+      unseenTotal,
+      team,
+      dealerSeat,
+      futurePartnerCards,
+    ),
   );
 
   return bonus + pWin * evIfWon + pLose * evIfLost + pTie * evIfTied;

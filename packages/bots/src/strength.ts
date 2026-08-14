@@ -91,25 +91,43 @@ function strongerTable(vira: Card): Int8Array {
   return table;
 }
 
+/**
+ * Quantas cartas mais fortes que a força `strength` ainda podem estar em jogo.
+ * Use esta função quando a ameaça é um limiar numérico (0–13), não uma carta:
+ * `RANKS[strength]` deixa de ser a carta daquela força quando aquele rank é a
+ * manilha (promovida para 10–13).
+ */
+export function strongerCardsRemainingThanStrength(
+  strength: number,
+  vira: Card,
+  seenCards: readonly Card[],
+): number {
+  const idx = Math.max(0, Math.min(14, strength));
+  // Dedupe por id numérico: a versão antiga deduplicava via Set<string> e o
+  // resultado precisa continuar idêntico mesmo se `seen` repetir uma carta.
+  const counted = new Set<number>();
+  let seenStronger = 0;
+  for (const c of seenCards) {
+    if (getCardStrength(c, vira) <= strength) continue;
+    const id = cardId(c);
+    if (counted.has(id)) continue;
+    counted.add(id);
+    seenStronger++;
+  }
+  return strongerTable(vira)[idx]! - seenStronger;
+}
+
 /** Quantas cartas mais fortes que `card` ainda podem estar em jogo (não vistas). */
 export function strongerCardsRemaining(
   card: Card,
   vira: Card,
   seenCards: readonly Card[],
 ): number {
-  const myStrength = getCardStrength(card, vira);
-  // Dedupe por id numérico: a versão antiga deduplicava via Set<string> e o
-  // resultado precisa continuar idêntico mesmo se `seen` repetir uma carta.
-  const counted = new Set<number>();
-  let seenStronger = 0;
-  for (const c of seenCards) {
-    if (getCardStrength(c, vira) <= myStrength) continue;
-    const id = cardId(c);
-    if (counted.has(id)) continue;
-    counted.add(id);
-    seenStronger++;
-  }
-  return strongerTable(vira)[myStrength]! - seenStronger;
+  return strongerCardsRemainingThanStrength(
+    getCardStrength(card, vira),
+    vira,
+    seenCards,
+  );
 }
 
 /**

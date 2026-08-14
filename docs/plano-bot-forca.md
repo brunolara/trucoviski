@@ -2,11 +2,12 @@
 
 Status: **E0 aprovada; E1 implementada; E2 concluída; E3 concluída; E4 concluída
 (benchmark PIMC avaliado e não promovido por latência); E5 concluída e
-promovida; E6 consolidada sob D-bot-2.** Suíte tática 100% verde (57/67
-acertos). Liga no HEAD atual (planner usa `partnerCards` na mão de onze), com
-`holdout-3` cego: média **60,24%**, pior confronto **54,20%** vs conservador,
-vs v2 **61,34%**. Os **59,99%** do `holdout-2` são do código _antes_ de usar as
-cartas conhecidas do parceiro e não descrevem este HEAD.
+promovida; E6 consolidada sob D-bot-2.** Catálogo tático: 52/67 corretos, com
+regressão do baseline verde (os 15 restantes são falhas conhecidas, não um
+acerto tático de 100%). Liga do `holdout-3` (antes dos fixes de força/manilha e
+reuso de `partnerCards`): média **60,24%**, pior **54,20%** vs conservador, vs
+v2 **61,34%**. Revalidação só em train/train-a/train-b após esses fixes (2k
+seeds, sem holdout-4): média **60,59%**, pior **55,17%**, vs v2 **61,86%**.
 
 Origem: queixa do usuário — _"está muito fácil ganhar dos bots"_.
 
@@ -417,28 +418,29 @@ Regra herdada de `plano-bot-v3.md` (e mantida): **toda medição entra aqui,
 inclusive as que falharam**. Número que falhou economiza CPU de quem vier
 depois.
 
-| Data       | Medição                                | N         | Bloco                           | Resultado                                                                                                                                                                                                  |
-| ---------- | -------------------------------------- | --------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-08-13 | v3 vs v2                               | 20k seeds | `test`                          | 52,65%                                                                                                                                                                                                     |
-| 2026-08-13 | v3 vs v1                               | 20k seeds | `test`                          | 57,86%                                                                                                                                                                                                     |
-| 2026-08-13 | v2 vs v1                               | 20k seeds | `test`                          | 56,24%                                                                                                                                                                                                     |
-| 2026-08-13 | montecarlo vs v2                       | 150 seeds | `test`                          | 43,33% (224/300 fecham em 12)                                                                                                                                                                              |
-| 2026-08-13 | liga E1 baseline                       | 2k seeds  | train,train-a,train-b           | v3 média 56,23%, pior 51,50% vs v2                                                                                                                                                                         |
-| 2026-08-13 | E2 T1 ablação `hiddenCardOutsideFerro` | 4k/bloco  | train,train-a,train-b           | variante 45,11% / 45,24% / 45,75%; média 45,37%, pior 45,11%; **revertida**                                                                                                                                |
-| 2026-08-13 | E2 T2 ablação `openingProfile`         | 4k/bloco  | train,train-a,train-b           | variante 49,85% / 49,86% / 49,90%; média 49,87%, pior 49,85%; **promovida**                                                                                                                                |
-| 2026-08-13 | E2 T8 ablação `rngTieBreak`            | 4k/bloco  | train,train-a,train-b           | variante 49,82% / 49,98% / 50,00%; média 49,93%, pior 49,82%; **promovida**                                                                                                                                |
-| 2026-08-13 | E2 T6 ablação `ferroRandomIndex`       | 4k/bloco  | train,train-a,train-b           | variante 49,76% / 49,92% / 49,68%; média 49,79%, pior 49,68%; **promovida**                                                                                                                                |
-| 2026-08-13 | E2 T3 ablação `winMargin`              | 4k/bloco  | train,train-a,train-b           | variante 47,10% / 47,21% / 47,24%; média 47,18%, pior 47,10%; **revertida**                                                                                                                                |
-| 2026-08-13 | E2 T5 ablação `partnerFolgaDiscard`    | 4k/bloco  | train,train-a,train-b           | variante 50,34% / 49,78% / 49,28%; média 49,80%, pior 49,28%; **revertida**                                                                                                                                |
-| 2026-08-13 | E2 T7 ablação `twelveScoreBalance`     | 4k/bloco  | train,train-a,train-b           | variante 53,01% / 53,17% / 53,15%; média **53,11%**, pior **53,01%**; **promovida**                                                                                                                        |
-| 2026-08-13 | liga pós-E2 (T2+T8+T6+T7 promovidos)   | 2k seeds  | train,train-a,train-b           | v3 média **56,57%**, pior **52,77%** vs v2                                                                                                                                                                 |
-| 2026-08-13 | E3 ablação `vazaPlanning`              | 4k/bloco  | train,train-a,train-b           | variante 54,51% / 52,90% / 53,85%; média **53,75%**, pior **52,90%**; **promovida**                                                                                                                        |
-| 2026-08-13 | liga pós-E3 (`vazaPlanning` promovido) | 2k seeds  | train,train-a,train-b           | v3 média **58,08%**, pior **53,97%** vs agressivo (+4,97pp vs v2)                                                                                                                                          |
-| 2026-08-14 | E4 PIMC 16/32/64 determinizações       | 150 seeds | `test`                          | 56,44% / 55,00% / 57,11% vs Heuristic V3; p95 de latência 6,43ms a 26,67ms; **não promovido por latência**                                                                                                 |
-| 2026-08-14 | E5 Sweep Truco Anti-Curse              | 4k seeds  | train-a,train-b                 | conf_média **58,69%** (Δ = +0,56pp), conf_pior **56,20%** (Δ = +2,09pp), self≥9 = 25%; **promovida**                                                                                                       |
-| 2026-08-14 | Liga Final E5 (com holdout aberto)     | 2k seeds  | 4 blocos                        | v3 média **58,33%**, pior **55,33%** vs conservador; vs v2 **57,23%**. Medido **antes** do alinhamento do planner (`2afba506`) e das correções de canga futura / bônus do parceiro — **não é o HEAD**      |
-| 2026-08-14 | Liga pós-correção do planner           | 2k seeds  | train,train-a,train-b,holdout-2 | v3 média **59,99%**, pior **54,40%** vs conservador (`train`); vs v2 **60,25%**, vs v1 **63,96%**, vs agressivo **61,12%**, vs conservador **54,61%**. Holdout-2 (seed 11.000.013) alinhado com os treinos |
+| Data       | Medição                                | N         | Bloco                           | Resultado                                                                                                                                                                                                    |
+| ---------- | -------------------------------------- | --------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-08-13 | v3 vs v2                               | 20k seeds | `test`                          | 52,65%                                                                                                                                                                                                       |
+| 2026-08-13 | v3 vs v1                               | 20k seeds | `test`                          | 57,86%                                                                                                                                                                                                       |
+| 2026-08-13 | v2 vs v1                               | 20k seeds | `test`                          | 56,24%                                                                                                                                                                                                       |
+| 2026-08-13 | montecarlo vs v2                       | 150 seeds | `test`                          | 43,33% (224/300 fecham em 12)                                                                                                                                                                                |
+| 2026-08-13 | liga E1 baseline                       | 2k seeds  | train,train-a,train-b           | v3 média 56,23%, pior 51,50% vs v2                                                                                                                                                                           |
+| 2026-08-13 | E2 T1 ablação `hiddenCardOutsideFerro` | 4k/bloco  | train,train-a,train-b           | variante 45,11% / 45,24% / 45,75%; média 45,37%, pior 45,11%; **revertida**                                                                                                                                  |
+| 2026-08-13 | E2 T2 ablação `openingProfile`         | 4k/bloco  | train,train-a,train-b           | variante 49,85% / 49,86% / 49,90%; média 49,87%, pior 49,85%; **promovida**                                                                                                                                  |
+| 2026-08-13 | E2 T8 ablação `rngTieBreak`            | 4k/bloco  | train,train-a,train-b           | variante 49,82% / 49,98% / 50,00%; média 49,93%, pior 49,82%; **promovida**                                                                                                                                  |
+| 2026-08-13 | E2 T6 ablação `ferroRandomIndex`       | 4k/bloco  | train,train-a,train-b           | variante 49,76% / 49,92% / 49,68%; média 49,79%, pior 49,68%; **promovida**                                                                                                                                  |
+| 2026-08-13 | E2 T3 ablação `winMargin`              | 4k/bloco  | train,train-a,train-b           | variante 47,10% / 47,21% / 47,24%; média 47,18%, pior 47,10%; **revertida**                                                                                                                                  |
+| 2026-08-13 | E2 T5 ablação `partnerFolgaDiscard`    | 4k/bloco  | train,train-a,train-b           | variante 50,34% / 49,78% / 49,28%; média 49,80%, pior 49,28%; **revertida**                                                                                                                                  |
+| 2026-08-13 | E2 T7 ablação `twelveScoreBalance`     | 4k/bloco  | train,train-a,train-b           | variante 53,01% / 53,17% / 53,15%; média **53,11%**, pior **53,01%**; **promovida**                                                                                                                          |
+| 2026-08-13 | liga pós-E2 (T2+T8+T6+T7 promovidos)   | 2k seeds  | train,train-a,train-b           | v3 média **56,57%**, pior **52,77%** vs v2                                                                                                                                                                   |
+| 2026-08-13 | E3 ablação `vazaPlanning`              | 4k/bloco  | train,train-a,train-b           | variante 54,51% / 52,90% / 53,85%; média **53,75%**, pior **52,90%**; **promovida**                                                                                                                          |
+| 2026-08-13 | liga pós-E3 (`vazaPlanning` promovido) | 2k seeds  | train,train-a,train-b           | v3 média **58,08%**, pior **53,97%** vs agressivo (+4,97pp vs v2)                                                                                                                                            |
+| 2026-08-14 | E4 PIMC 16/32/64 determinizações       | 150 seeds | `test`                          | 56,44% / 55,00% / 57,11% vs Heuristic V3; p95 de latência 6,43ms a 26,67ms; **não promovido por latência**                                                                                                   |
+| 2026-08-14 | E5 Sweep Truco Anti-Curse              | 4k seeds  | train-a,train-b                 | conf_média **58,69%** (Δ = +0,56pp), conf_pior **56,20%** (Δ = +2,09pp), self≥9 = 25%; **promovida**                                                                                                         |
+| 2026-08-14 | Liga Final E5 (com holdout aberto)     | 2k seeds  | 4 blocos                        | v3 média **58,33%**, pior **55,33%** vs conservador; vs v2 **57,23%**. Medido **antes** do alinhamento do planner (`2afba506`) e das correções de canga futura / bônus do parceiro — **não é o HEAD**        |
+| 2026-08-14 | Liga pós-correção do planner           | 2k seeds  | train,train-a,train-b,holdout-2 | v3 média **59,99%**, pior **54,40%** vs conservador (`train`); vs v2 **60,25%**, vs v1 **63,96%**, vs agressivo **61,12%**, vs conservador **54,61%**. Holdout-2 (seed 11.000.013) alinhado com os treinos   |
 | 2026-08-14 | Liga pós-`partnerCards` no planner     | 2k seeds  | train,train-a,train-b,holdout-3 | v3 média **60,24%**, pior **54,20%** vs conservador (`train-a`); vs v2 **61,34%**, vs v1 **63,46%**, vs agressivo **61,39%**, vs conservador **54,80%**. Holdout-3 (seed 13.000.017) alinhado com os treinos |
+| 2026-08-14 | Liga pós-fix manilha + consume partner | 2k seeds  | train,train-a,train-b           | v3 média **60,59%**, pior **55,17%** vs conservador (`train`); vs v2 **61,86%**, vs v1 **63,97%**, vs agressivo **61,13%**, vs conservador **55,38%**. Sem holdout-4                                         |
 
 ### Matriz E5 (obsoleta — holdout 9.000.007, código anterior ao alinhamento do planner)
 
@@ -469,13 +471,13 @@ planner (canga futura por mesmo rank, bônus só contra oponente, 1–1 + canga 
 
 ### Matriz atual (2.000 seeds/confronto, espelhado, IC pareado, 4 blocos incluindo `holdout-3`)
 
-| Política         | Média Geral | Pior Confronto em Qualquer Bloco        |
-| ---------------- | ----------- | --------------------------------------- |
-| **heuristic-v3** | **60,24%**  | **54,20%** vs conservador (`train-a`)   |
-| conservador      | 50,16%      | 44,65% vs v3 (`train`)                  |
-| agressivo        | 48,70%      | 37,78% vs v3 (`train-b`)                |
-| heuristic-v2     | 46,84%      | 38,00% vs v3 (`train-b`)                |
-| heuristic-v1     | 44,06%      | 35,60% vs v3 (`train`)                  |
+| Política         | Média Geral | Pior Confronto em Qualquer Bloco      |
+| ---------------- | ----------- | ------------------------------------- |
+| **heuristic-v3** | **60,24%**  | **54,20%** vs conservador (`train-a`) |
+| conservador      | 50,16%      | 44,65% vs v3 (`train`)                |
+| agressivo        | 48,70%      | 37,78% vs v3 (`train-b`)              |
+| heuristic-v2     | 46,84%      | 38,00% vs v3 (`train-b`)              |
+| heuristic-v1     | 44,06%      | 35,60% vs v3 (`train`)                |
 
 **Desempenho detalhado do V3 no HEAD atual:**
 
@@ -489,8 +491,8 @@ planner (canga futura por mesmo rank, bônus só contra oponente, 1–1 + canga 
   train-b: 55,17%, holdout-3: **54,47%**)
 
 Holdout-3 (seed 13.000.017) aberto **uma única vez** após o planner passar a
-usar `view.partnerCards` na mão de onze, em vez de estimar a mão do parceiro
-no universo desconhecido. Generalização alinhada com `train` / `train-a` /
+usar `view.partnerCards` na mão de onze, em vez de estimar a mão do parceiro no
+universo desconhecido. Generalização alinhada com `train` / `train-a` /
 `train-b`.
 
 ---
@@ -519,6 +521,10 @@ O plano de força do bot (`E0` a `E6`) está **integralmente concluído**:
 - **Pós-E5 (`partnerCards` no planner)**: na mão de onze o planner usa as cartas
   visíveis do parceiro em vez de sortear no unseen. Liga reexecutada +
   `holdout-3`: média **60,24%**, vs v2 **61,34%**, pior confronto **54,20%**.
+- **Pós-E5 (força/manilha + consume de partnerCards)**: `unseenPartnerSaveProb`
+  usa limiar de força em vez de `RANKS[n]`; lookahead não reutiliza a mesma
+  carta do parceiro. Revalidação train/train-a/train-b (2k, sem holdout-4):
+  média **60,59%**, vs v2 **61,86%**, pior **55,17%**.
 - **E6 (Dificuldades e Canário)**: Consolidado em política única sob `D-bot-2`.
-- **Qualidade**: `pnpm gate` 100% verde (383 testes, cobertura >96%),
-  determinismo estrito e zero dependências de runtime.
+- **Qualidade**: `pnpm test` 389 testes, cobertura >96%, determinismo estrito e
+  zero dependências de runtime.

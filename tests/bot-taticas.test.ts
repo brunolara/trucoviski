@@ -399,6 +399,10 @@ const CASOS: Tatica[] = [
   },
 
   // ---- 3ª vaza decisiva -----------------------------------------------
+  // Várias fixtures desta categoria têm 2 cartas na mão após 2 vazas
+  // completas (estado que a engine nunca produz: a mão começa com 3 e
+  // perde 1 por vaza). Servem como catálogo de intenção tática, não como
+  // replay de partida. Invariante real: handCards.length === 3 - completedVazas.length.
   {
     id: "terceira-min-win-1",
     categoria: "terceira-vaza",
@@ -1080,7 +1084,7 @@ describe("posições táticas (E1)", () => {
     }
   });
 
-  it("catálogo v3: passing/failing estável (E2 atualiza)", () => {
+  it("catálogo tático: regressão do baseline verde (não é 100% de acerto)", () => {
     const passing = CASOS.filter((c) => hits(c)).map((c) => c.id);
     const failing = CASOS.filter((c) => !hits(c)).map((c) => c.id);
     expect(passing.sort()).toEqual([...V3_PASSING].sort());
