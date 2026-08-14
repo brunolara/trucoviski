@@ -297,3 +297,69 @@ describe("planner: bônus de superar oponente", () => {
     expect(action).toEqual({ type: "playCard", card: seven });
   });
 });
+
+describe("planner: mão de onze usa partnerCards conhecidas", () => {
+  const seven = C("7", "ouros");
+  const queen = C("Q", "paus");
+  const ace = C("A", "paus");
+  const tableThree = C("3", "copas");
+  const zap = C("5", "paus");
+  const weakPartner = [C("4", "ouros"), C("6", "espadas"), C("7", "copas")];
+
+  function elevenView(partnerCards: readonly Card[] | undefined): PlayerView {
+    return view({
+      isElevenHand: true,
+      elevenDecision: "play",
+      scores: [11, 5],
+      partnerCards,
+      handCards: [seven, queen],
+      legalActions: playActions([seven, queen]),
+      currentVaza: {
+        plays: [null, null, null, tableThree],
+        covered: [false, true, false, false],
+        currentSeat: 0,
+      },
+    });
+  }
+
+  it("parceiro conhecido tem Zap: sabe que o parceiro cobre o 3", () => {
+    const known = elevenView([zap, C("7", "espadas"), C("4", "copas")]);
+    const unknown = elevenView(undefined);
+    expect(probs(seven, known)).toEqual({ pWin: 1, pLose: 0, pTie: 0 });
+    expect(probs(seven, unknown).pWin).toBeLessThan(1);
+    expect(probs(seven, unknown).pWin).toBeGreaterThan(0);
+  });
+
+  it("parceiro conhecido só tem cartas fracas: não inventa cobertura", () => {
+    const known = elevenView(weakPartner);
+    const unknown = elevenView(undefined);
+    expect(probs(seven, known)).toEqual({ pWin: 0, pLose: 1, pTie: 0 });
+    expect(probs(seven, unknown).pWin).toBeGreaterThan(0);
+  });
+
+  it("não gasta Ás para cobrir um 3 se o parceiro já tem Zap", () => {
+    const v = view({
+      isElevenHand: true,
+      elevenDecision: "play",
+      scores: [11, 5],
+      partnerCards: [zap, C("4", "copas"), C("6", "espadas")],
+      handCards: [ace, seven],
+      legalActions: playActions([ace, seven]),
+      currentVaza: {
+        plays: [null, null, null, tableThree],
+        covered: [false, true, false, false],
+        currentSeat: 0,
+      },
+    });
+    const action = decidePlannedCardAction(
+      v,
+      playActions([ace, seven]),
+      V3_FEATURES,
+      midRng,
+    );
+    expect(action).toEqual({ type: "playCard", card: seven });
+    expect(evaluateCardRoute(seven, v, V3_FEATURES)).toBeGreaterThan(
+      evaluateCardRoute(ace, v, V3_FEATURES),
+    );
+  });
+});

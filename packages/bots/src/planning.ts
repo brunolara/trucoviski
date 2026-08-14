@@ -92,6 +92,75 @@ function remainingWinLoseTie(
   return { pWin, pLose, pTie };
 }
 
+function vazaAgainstUnseen(
+  card: Card,
+  vira: Card,
+  seen: readonly Card[],
+  unseenTotal: number,
+  numCards: number,
+): { pWin: number; pLose: number; pTie: number } {
+  return remainingWinLoseTie(
+    strongerCardsRemaining(card, vira, seen),
+    equalCardsRemaining(card, vira, seen),
+    unseenTotal,
+    numCards,
+  );
+}
+
+/**
+ * Resultado certo contra `tableBest` quando a mão do parceiro é visível
+ * (mão de onze não-ferro). `null` se as cartas não são conhecidas.
+ */
+function knownPartnerVs(
+  view: PlayerView,
+  tableBest: Card,
+): { canBeat: boolean; canTie: boolean; best: Card | null } | null {
+  if (view.partnerCards === undefined) return null;
+  let canBeat = false;
+  let canTie = false;
+  let best: Card | null = null;
+  for (const card of view.partnerCards) {
+    const cmp = compareCards(card, tableBest, view.vira, RANKS, SUITS);
+    if (cmp > 0) canBeat = true;
+    if (cmp === 0) canTie = true;
+    if (
+      best === null ||
+      compareCards(card, best, view.vira, RANKS, SUITS) > 0
+    ) {
+      best = card;
+    }
+  }
+  return { canBeat, canTie, best };
+}
+
+function partnerStillToPlay(view: PlayerView): boolean {
+  return seatStillToPlay(view, partnerSeatOf(view.mySeat));
+}
+
+/** Parceiro conhecido ainda joga e tem carta que supera o líder da mesa. */
+function knownPartnerCovers(view: PlayerView, tableBest: Card): boolean {
+  if (!partnerStillToPlay(view)) return false;
+  return knownPartnerVs(view, tableBest)?.canBeat === true;
+}
+
+function unseenPartnerSaveProb(
+  tableBest: Card,
+  vira: Card,
+  seen: readonly Card[],
+  unseenTotal: number,
+  numCards: number,
+): number {
+  const myCardStrength = getCardStrength(tableBest, vira);
+  const neededStrength = Math.max(myCardStrength, 8);
+  const partnerThreatRank = RANKS[Math.min(9, neededStrength)] ?? "K";
+  const partnerStronger = strongerCardsRemaining(
+    { rank: partnerThreatRank, suit: "ouros" },
+    vira,
+    seen,
+  );
+  return probHasStronger(partnerStronger, unseenTotal, numCards) * 0.35;
+}
+
 /** Cartas do baralho ainda não observadas, sem contar duplicatas. */
 export function countUnseenCards(seen: readonly Card[]): number {
   const unique = new Set<string>();
@@ -119,20 +188,27 @@ function probFutureCardWin(
   vira: Card,
   seen: readonly Card[],
   unseenTotal: number,
+  partnerCards: readonly Card[] | undefined,
 ): number {
   const cardsInFuture = Math.max(1, 3 - fVazaIndex);
   const stronger = strongerCardsRemaining(card, vira, seen);
   const pOppBeats = probHasStronger(stronger, unseenTotal, 2 * cardsInFuture);
-  const myStrength = getCardStrength(card, vira);
-  const neededStrength = Math.max(myStrength, 8);
-  const partnerThreatRank = RANKS[Math.min(9, neededStrength)] ?? "K";
-  const partnerStronger = strongerCardsRemaining(
-    { rank: partnerThreatRank, suit: "ouros" },
-    vira,
-    seen,
-  );
-  const pPartnerHelps =
-    probHasStronger(partnerStronger, unseenTotal, cardsInFuture) * 0.35;
+  const neededStrength = Math.max(getCardStrength(card, vira), 8);
+  let pPartnerHelps: number;
+  if (partnerCards !== undefined) {
+    const partnerHasCover = partnerCards.some(
+      (c) => getCardStrength(c, vira) > neededStrength,
+    );
+    pPartnerHelps = partnerHasCover ? 0.35 : 0;
+  } else {
+    pPartnerHelps = unseenPartnerSaveProb(
+      card,
+      vira,
+      seen,
+      unseenTotal,
+      cardsInFuture,
+    );
+  }
   return Math.max(0, Math.min(1, 1 - pOppBeats + pOppBeats * pPartnerHelps));
 }
 
@@ -223,29 +299,43 @@ export function resolveVazaOutcomeProbabilities(
   // Caso 2: Nosso time está liderando a mesa
   if (leader.type === "team" && leader.team === team) {
     const numOppCards = oppsAfter.length * cardsPerPlayer;
-    const stronger = strongerCardsRemaining(tableBest, view.vira, seen);
-    const equal = equalCardsRemaining(tableBest, view.vira, seen);
-    const vsOpp = remainingWinLoseTie(
-      stronger,
-      equal,
+    if (!partnerAfter) {
+      return vazaAgainstUnseen(
+        tableBest,
+        view.vira,
+        seen,
+        unseenTotal,
+        numOppCards,
+      );
+    }
+
+    const known = knownPartnerVs(view, tableBest);
+    if (known) {
+      const cover =
+        known.canBeat && known.best !== null ? known.best : tableBest;
+      return vazaAgainstUnseen(
+        cover,
+        view.vira,
+        seen,
+        unseenTotal,
+        numOppCards,
+      );
+    }
+
+    const vsOpp = vazaAgainstUnseen(
+      tableBest,
+      view.vira,
+      seen,
       unseenTotal,
       numOppCards,
     );
-
-    if (!partnerAfter) {
-      return vsOpp;
-    }
-
-    const myCardStrength = getCardStrength(tableBest, view.vira);
-    const neededStrength = Math.max(myCardStrength, 8);
-    const partnerThreatRank = RANKS[Math.min(9, neededStrength)] ?? "K";
-    const partnerStronger = strongerCardsRemaining(
-      { rank: partnerThreatRank, suit: "ouros" },
+    const pPartnerSaves = unseenPartnerSaveProb(
+      tableBest,
       view.vira,
       seen,
+      unseenTotal,
+      cardsPerPlayer,
     );
-    const pPartnerSaves =
-      probHasStronger(partnerStronger, unseenTotal, cardsPerPlayer) * 0.35;
     const pLose = vsOpp.pLose * (1 - pPartnerSaves);
     const pWin = Math.min(1, vsOpp.pWin + vsOpp.pLose * pPartnerSaves);
     const pTie = Math.max(0, 1 - pWin - pLose);
@@ -257,11 +347,33 @@ export function resolveVazaOutcomeProbabilities(
     if (!partnerAfter) {
       return { pWin: 0, pLose: 1, pTie: 0 };
     }
-    const stronger = strongerCardsRemaining(tableBest, view.vira, seen);
-    const equal = equalCardsRemaining(tableBest, view.vira, seen);
-    const vsPartner = remainingWinLoseTie(
-      stronger,
-      equal,
+
+    const known = knownPartnerVs(view, tableBest);
+    if (known) {
+      if (!known.canBeat && !known.canTie) {
+        return { pWin: 0, pLose: 1, pTie: 0 };
+      }
+      if (oppsAfter.length === 0) {
+        return known.canBeat
+          ? { pWin: 1, pLose: 0, pTie: 0 }
+          : { pWin: 0, pLose: 0, pTie: 1 };
+      }
+      const cover = known.best ?? tableBest;
+      const vsOpp = vazaAgainstUnseen(
+        cover,
+        view.vira,
+        seen,
+        unseenTotal,
+        oppsAfter.length * cardsPerPlayer,
+      );
+      if (known.canBeat) return vsOpp;
+      return { pWin: 0, pLose: vsOpp.pLose, pTie: 1 - vsOpp.pLose };
+    }
+
+    const vsPartner = vazaAgainstUnseen(
+      tableBest,
+      view.vira,
+      seen,
       unseenTotal,
       cardsPerPlayer,
     );
@@ -273,9 +385,8 @@ export function resolveVazaOutcomeProbabilities(
   }
 
   // Caso 4: Mesa empatada com oponente
-  const stronger = strongerCardsRemaining(tableBest, view.vira, seen);
   const pOppBeats = probHasStronger(
-    stronger,
+    strongerCardsRemaining(tableBest, view.vira, seen),
     unseenTotal,
     oppsAfter.length * cardsPerPlayer,
   );
@@ -287,16 +398,35 @@ export function resolveVazaOutcomeProbabilities(
     };
   }
 
-  const myCardStrength = getCardStrength(tableBest, view.vira);
-  const neededStrength = Math.max(myCardStrength, 8);
-  const partnerThreatRank = RANKS[Math.min(9, neededStrength)] ?? "K";
-  const partnerStronger = strongerCardsRemaining(
-    { rank: partnerThreatRank, suit: "ouros" },
+  const known = knownPartnerVs(view, tableBest);
+  if (known) {
+    if (known.canBeat) {
+      const cover = known.best ?? tableBest;
+      if (oppsAfter.length === 0) {
+        return { pWin: 1, pLose: 0, pTie: 0 };
+      }
+      return vazaAgainstUnseen(
+        cover,
+        view.vira,
+        seen,
+        unseenTotal,
+        oppsAfter.length * cardsPerPlayer,
+      );
+    }
+    return {
+      pWin: 0,
+      pLose: pOppBeats,
+      pTie: 1 - pOppBeats,
+    };
+  }
+
+  const pPartnerSaves = unseenPartnerSaveProb(
+    tableBest,
     view.vira,
     seen,
+    unseenTotal,
+    cardsPerPlayer,
   );
-  const pPartnerSaves =
-    probHasStronger(partnerStronger, unseenTotal, cardsPerPlayer) * 0.35;
   const pLose = pOppBeats * (1 - pPartnerSaves);
   const pWin = pOppBeats * pPartnerSaves;
   const pTie = Math.max(0, 1 - pLose - pWin);
@@ -329,11 +459,25 @@ function evalFutureVaza2(
   dealerSeat: Seat,
 ): number {
   const p2 = splitWinLoseTie(
-    probFutureCardWin(cardV2, 1, view.vira, seen, unseenTotal),
+    probFutureCardWin(
+      cardV2,
+      1,
+      view.vira,
+      seen,
+      unseenTotal,
+      view.partnerCards,
+    ),
     FUTURE_VAZA_TIE_P,
   );
   const p3 = splitWinLoseTie(
-    probFutureCardWin(cardV3, 2, view.vira, seen, unseenTotal),
+    probFutureCardWin(
+      cardV3,
+      2,
+      view.vira,
+      seen,
+      unseenTotal,
+      view.partnerCards,
+    ),
     FUTURE_VAZA_TIE_P,
   );
 
@@ -405,7 +549,14 @@ function handWinProbVaza2(
   dealerSeat: Seat,
 ): number {
   const p3 = splitWinLoseTie(
-    probFutureCardWin(remCard, 2, view.vira, seen, unseenTotal),
+    probFutureCardWin(
+      remCard,
+      2,
+      view.vira,
+      seen,
+      unseenTotal,
+      view.partnerCards,
+    ),
     FUTURE_VAZA_TIE_P,
   );
 
@@ -567,7 +718,9 @@ export function evaluateCardRoute(
     firstVazaOutcome(view) === "lost" &&
     leaderBefore &&
     (leaderBefore.type === "tie" || leaderBefore.team !== team) &&
-    compareCards(candidateCard, leaderBefore.card, view.vira, RANKS, SUITS) > 0
+    compareCards(candidateCard, leaderBefore.card, view.vira, RANKS, SUITS) >
+      0 &&
+    !knownPartnerCovers(view, leaderBefore.card)
   ) {
     bonus += 0.2;
   }
@@ -576,7 +729,9 @@ export function evaluateCardRoute(
   if (
     vazaIndex === 2 &&
     leaderBefore &&
-    compareCards(candidateCard, leaderBefore.card, view.vira, RANKS, SUITS) > 0
+    compareCards(candidateCard, leaderBefore.card, view.vira, RANKS, SUITS) >
+      0 &&
+    !knownPartnerCovers(view, leaderBefore.card)
   ) {
     bonus += 0.5;
   }

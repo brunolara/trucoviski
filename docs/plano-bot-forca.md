@@ -3,10 +3,10 @@
 Status: **E0 aprovada; E1 implementada; E2 concluída; E3 concluída; E4 concluída
 (benchmark PIMC avaliado e não promovido por latência); E5 concluída e
 promovida; E6 consolidada sob D-bot-2.** Suíte tática 100% verde (57/67
-acertos). Liga no HEAD atual (planner alinhado + canga futura + bônus só contra
-oponente), com `holdout-2` cego: média **59,99%**, pior confronto **54,40%** vs
-conservador, vs v2 **60,25%**. Os **58,33%** da E5 são do código _antes_ do
-alinhamento do planner e não descrevem este HEAD.
+acertos). Liga no HEAD atual (planner usa `partnerCards` na mão de onze), com
+`holdout-3` cego: média **60,24%**, pior confronto **54,20%** vs conservador,
+vs v2 **61,34%**. Os **59,99%** do `holdout-2` são do código _antes_ de usar as
+cartas conhecidas do parceiro e não descrevem este HEAD.
 
 Origem: queixa do usuário — _"está muito fácil ganhar dos bots"_.
 
@@ -394,8 +394,9 @@ truco.
   livre.
 - **Winner's Curse / Overfitting**: Mitigado — seleção em `train` e confirmação
   em `train-a`/`train-b`. `holdout` (seed 9.000.007) abriu uma vez no fim da E5.
-  Depois do alinhamento do planner, a validação cega passou a ser `holdout-2`
-  (seed 11.000.013); não reabrir o seed antigo como holdout.
+  `holdout-2` (seed 11.000.013) abriu após a correção de canga futura. A
+  validação cega atual é `holdout-3` (seed 13.000.017), após o planner passar a
+  usar `partnerCards` na mão de onze; não reabrir seeds antigos como holdout.
 - **Anti-Cheat e Integridade**: Preservada — bot opera 100% via `PlayerView`
   (testado em `tests/bot-privacy.test.ts`).
 
@@ -437,6 +438,7 @@ depois.
 | 2026-08-14 | E5 Sweep Truco Anti-Curse              | 4k seeds  | train-a,train-b                 | conf_média **58,69%** (Δ = +0,56pp), conf_pior **56,20%** (Δ = +2,09pp), self≥9 = 25%; **promovida**                                                                                                       |
 | 2026-08-14 | Liga Final E5 (com holdout aberto)     | 2k seeds  | 4 blocos                        | v3 média **58,33%**, pior **55,33%** vs conservador; vs v2 **57,23%**. Medido **antes** do alinhamento do planner (`2afba506`) e das correções de canga futura / bônus do parceiro — **não é o HEAD**      |
 | 2026-08-14 | Liga pós-correção do planner           | 2k seeds  | train,train-a,train-b,holdout-2 | v3 média **59,99%**, pior **54,40%** vs conservador (`train`); vs v2 **60,25%**, vs v1 **63,96%**, vs agressivo **61,12%**, vs conservador **54,61%**. Holdout-2 (seed 11.000.013) alinhado com os treinos |
+| 2026-08-14 | Liga pós-`partnerCards` no planner     | 2k seeds  | train,train-a,train-b,holdout-3 | v3 média **60,24%**, pior **54,20%** vs conservador (`train-a`); vs v2 **61,34%**, vs v1 **63,46%**, vs agressivo **61,39%**, vs conservador **54,80%**. Holdout-3 (seed 13.000.017) alinhado com os treinos |
 
 ### Matriz E5 (obsoleta — holdout 9.000.007, código anterior ao alinhamento do planner)
 
@@ -451,7 +453,7 @@ depois.
 Holdout (seed 9.000.007) aberto **uma única vez** no encerramento de E5. Não
 reutilizar como holdout cego.
 
-### Matriz atual (2.000 seeds/confronto, espelhado, IC pareado, 4 blocos incluindo `holdout-2`)
+### Matriz holdout-2 (histórica — seed 11.000.013, código anterior a `partnerCards`)
 
 | Política         | Média Geral | Pior Confronto em Qualquer Bloco    |
 | ---------------- | ----------- | ----------------------------------- |
@@ -461,20 +463,35 @@ reutilizar como holdout cego.
 | heuristic-v2     | 47,34%      | 38,25% vs v3 (`train-b`)            |
 | heuristic-v1     | 43,81%      | 35,50% vs v3 (`holdout-2`)          |
 
-**Desempenho detalhado do V3 no HEAD atual:**
-
-- **v3 vs v2**: Média **60,25%** (train: 59,88%, train-a: 59,60%, train-b:
-  61,75%, holdout-2: **59,77%**)
-- **v3 vs v1**: Média **63,96%** (train: 64,18%, train-a: 63,85%, train-b:
-  63,32%, holdout-2: **64,50%**)
-- **v3 vs agressivo**: Média **61,12%** (train: 61,65%, train-a: 60,88%,
-  train-b: 61,40%, holdout-2: **60,58%**)
-- **v3 vs conservador**: Média **54,61%** (train: 54,40%, train-a: 54,57%,
-  train-b: 54,55%, holdout-2: **54,90%**)
-
 Holdout-2 (seed 11.000.013) aberto **uma única vez** após as correções do
 planner (canga futura por mesmo rank, bônus só contra oponente, 1–1 + canga na
-3ª documentada). Generalização alinhada com `train` / `train-a` / `train-b`.
+3ª documentada). Não reutilizar como holdout cego.
+
+### Matriz atual (2.000 seeds/confronto, espelhado, IC pareado, 4 blocos incluindo `holdout-3`)
+
+| Política         | Média Geral | Pior Confronto em Qualquer Bloco        |
+| ---------------- | ----------- | --------------------------------------- |
+| **heuristic-v3** | **60,24%**  | **54,20%** vs conservador (`train-a`)   |
+| conservador      | 50,16%      | 44,65% vs v3 (`train`)                  |
+| agressivo        | 48,70%      | 37,78% vs v3 (`train-b`)                |
+| heuristic-v2     | 46,84%      | 38,00% vs v3 (`train-b`)                |
+| heuristic-v1     | 44,06%      | 35,60% vs v3 (`train`)                  |
+
+**Desempenho detalhado do V3 no HEAD atual:**
+
+- **v3 vs v2**: Média **61,34%** (train: 60,80%, train-a: 60,95%, train-b:
+  62,00%, holdout-3: **61,60%**)
+- **v3 vs v1**: Média **63,46%** (train: 64,40%, train-a: 63,20%, train-b:
+  63,63%, holdout-3: **62,60%**)
+- **v3 vs agressivo**: Média **61,39%** (train: 61,70%, train-a: 60,20%,
+  train-b: 62,22%, holdout-3: **61,42%**)
+- **v3 vs conservador**: Média **54,80%** (train: 55,35%, train-a: 54,20%,
+  train-b: 55,17%, holdout-3: **54,47%**)
+
+Holdout-3 (seed 13.000.017) aberto **uma única vez** após o planner passar a
+usar `view.partnerCards` na mão de onze, em vez de estimar a mão do parceiro
+no universo desconhecido. Generalização alinhada com `train` / `train-a` /
+`train-b`.
 
 ---
 
@@ -499,6 +516,9 @@ O plano de força do bot (`E0` a `E6`) está **integralmente concluído**:
 - **Pós-E5 (correção do planner)**: canga futura por mesmo rank, bônus só contra
   oponente, 1–1 + canga na 3ª documentada. Liga reexecutada + `holdout-2`: média
   **59,99%**, vs v2 **60,25%**, pior confronto **54,40%**.
+- **Pós-E5 (`partnerCards` no planner)**: na mão de onze o planner usa as cartas
+  visíveis do parceiro em vez de sortear no unseen. Liga reexecutada +
+  `holdout-3`: média **60,24%**, vs v2 **61,34%**, pior confronto **54,20%**.
 - **E6 (Dificuldades e Canário)**: Consolidado em política única sob `D-bot-2`.
-- **Qualidade**: `pnpm gate` 100% verde (379 testes, cobertura >96%),
+- **Qualidade**: `pnpm gate` 100% verde (383 testes, cobertura >96%),
   determinismo estrito e zero dependências de runtime.

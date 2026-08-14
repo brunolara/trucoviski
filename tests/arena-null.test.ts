@@ -95,4 +95,10 @@ describe("liga (E1 smoke)", () => {
       /holdout/,
     );
   });
+
+  it("recusa holdout-3 sem --unlock-holdout", () => {
+    expect(() => runLeague({ games: 2, blocks: ["holdout-3"] })).toThrow(
+      /holdout/,
+    );
+  });
 });

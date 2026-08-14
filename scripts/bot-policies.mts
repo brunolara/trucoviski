@@ -17,7 +17,8 @@ import type { HeuristicV2Features } from "../packages/bots/src/index.js";
 /**
  * Blocos de seed. `test` foi contaminado (calibrado na F3–F5) e passou a ser
  * mais um bloco de treino. `holdout` abriu uma vez no fim da E5. `holdout-2`
- * é o holdout cego pós-correção do planner; não reabrir `holdout`.
+ * abriu após a correção de canga futura. `holdout-3` é o holdout cego após
+ * passar a usar `partnerCards` no planner; não reabrir os holdouts anteriores.
  */
 export const SEED_BLOCKS = {
   train: 42,
@@ -26,11 +27,16 @@ export const SEED_BLOCKS = {
   "train-b": 3_000_003,
   holdout: 9_000_007,
   "holdout-2": 11_000_013,
+  "holdout-3": 13_000_017,
 } as const;
 
 export type SeedBlock = keyof typeof SEED_BLOCKS;
 export const HOLDOUT_BLOCK: SeedBlock = "holdout";
-export const HOLDOUT_BLOCKS: readonly SeedBlock[] = ["holdout", "holdout-2"];
+export const HOLDOUT_BLOCKS: readonly SeedBlock[] = [
+  "holdout",
+  "holdout-2",
+  "holdout-3",
+];
 
 export const AGGRESSIVE_FEATURES: HeuristicV2Features = {
   ...V3_FEATURES,
