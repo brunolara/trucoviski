@@ -156,3 +156,25 @@ Limitação conhecida: quem fecha a aba no meio da partida perde o
 responder "sala cheia" porque a reserva de reconexão ainda conta. Passados os
 180 s, a retomada por `clientId` funciona. Saída voluntária (Sair) é retomável
 na hora.
+
+## Decisões do bot (E0 — `docs/plano-bot-forca.md`)
+
+- **D-bot-1** — Bot de produção nunca recebe cartas privadas alheias, seed da
+  partida ou `MatchState`. Só `PlayerView`. Invariante testada em
+  `tests/bot-privacy.test.ts`.
+- **D-bot-2** — Sem nível de dificuldade. Um único bot, sempre a melhor política
+  aprovada. Sem UI de dificuldade na Home nem no lobby. Confirma
+  `docs/plano-menu.md` ("sem configuração de dificuldade"). A etapa E6 do plano
+  de força (Casual/Normal/Difícil) fica sem efeito.
+- **D-bot-3** — Não aplicável: não há níveis. Adversários, parceiro, substituto
+  de desconectado e conselho de truco usam a mesma política de produção.
+- **D-bot-4** — Bot nunca usa `surrender` com humano na mesa. Continua evitado
+  nas heurísticas (`heuristic2.ts`, `heuristic.ts`).
+- **D-bot-5** — Dificuldade, se um dia existir, nunca se implementa com
+  informação extra nem jogada ilegal. Só profundidade de busca, margem de risco,
+  frequência de blefe e taxa limitada de erro deliberado. Com D-bot-2, vale como
+  restrição permanente da política única.
+- **D-bot-6** — Adaptação ao jogador é permitida, só com sinais **públicos**
+  (truco, corrida, carta coberta, cartas reveladas na mesa) e **reiniciada a
+  cada partida**. Sem perfil persistente. Ainda não implementada (E1 não a
+  entrega).

@@ -24,6 +24,7 @@ import {
   wonFirstVaza,
   partnerSeatOf,
 } from "./strength.js";
+import { decidePlannedCardAction } from "./planning.js";
 
 /** Gerador de números aleatórios injetável (default: Math.random). Permite
  * determinismo em testes/arena e blefe real em produção. */
@@ -61,6 +62,25 @@ export interface HeuristicV2Features {
   softOverrides: boolean;
   /** handStrength() no lugar de myMax puro. */
   topTwoStrength: boolean;
+  /** Permite jogar carta coberta fora do ferro quando a vaza é irrelevante. */
+  hiddenCardOutsideFerro: boolean;
+  /** Abre a vaza forte quando a melhor carta ainda está viva ou é obrigatório reagir. */
+  openingProfile: boolean;
+  /** T8: empate de força em pickWeakest desempata por rng, não pela ordem de legalActions. */
+  rngTieBreak: boolean;
+  /** T6: no ferro, escolhe o índice da carta coberta por rng em vez de sempre 0. */
+  ferroRandomIndex: boolean;
+  /** T3: ao vencer a vaza, só gasta a maior se ela cobrir (0 mais fortes vivas). */
+  winMargin: boolean;
+  /**
+   * T5: só descarta automático se o parceiro leva com folga; sem folga e com
+   * carta travada, tranca a vaza em vez de entregar ao próximo.
+   */
+  partnerFolgaDiscard: boolean;
+  /** T7: corrige anulação do trucoThreshold no valor 12 quando ambos os lados cobrem 12. */
+  twelveScoreBalance: boolean;
+  /** E3: substitui decisão 1-ply por avaliação de rota de vitória da mão. */
+  vazaPlanning: boolean;
 
   // ---- v3 knobs (só entram com o flag correspondente ligado) ----
   /** Piso de força (0-13) que cada jogador precisa na mão de onze. */
@@ -101,6 +121,14 @@ export const DEFAULT_FEATURES: HeuristicV2Features = {
   distanceToTwelve: false,
   softOverrides: false,
   topTwoStrength: false,
+  hiddenCardOutsideFerro: false,
+  openingProfile: false,
+  rngTieBreak: false,
+  ferroRandomIndex: false,
+  winMargin: false,
+  partnerFolgaDiscard: false,
+  twelveScoreBalance: false,
+  vazaPlanning: false,
   elevenPairFloor: 8,
   positionBeatsBonus: 0.08,
   positionInfoBonus: 0.04,
@@ -119,22 +147,30 @@ export const DEFAULT_FEATURES: HeuristicV2Features = {
 export const V3_FEATURES: HeuristicV2Features = {
   ...DEFAULT_FEATURES,
   responseBaseOffset: 3.5,
-  proposeBaseOffset: 2.5, // F5.3: recalibrar — o 2.0 foi treinado com double-count
+  proposeBaseOffset: 3.5,
   elevenNeedsPair: true,
   positionAware: true,
   raiseGuard: true,
   distanceToTwelve: true,
   softOverrides: true,
   topTwoStrength: true,
+  hiddenCardOutsideFerro: false,
+  openingProfile: true,
+  rngTieBreak: true,
+  ferroRandomIndex: true,
+  winMargin: false,
+  partnerFolgaDiscard: false,
+  twelveScoreBalance: true,
+  vazaPlanning: true,
   elevenPairFloor: 9,
-  positionBeatsBonus: 0.08,
+  positionBeatsBonus: 0.02,
   positionInfoBonus: 0.04,
-  raiseGuardMaxLevel: 9,
-  distDangerWeight: 0.1,
-  distFinishWeight: 0.1,
-  runCostWeight: 0.1,
+  raiseGuardMaxLevel: 6,
+  distDangerWeight: 0.04,
+  distFinishWeight: 0.12,
+  runCostWeight: 0.14,
   softTopAliveBonus: 0.35,
-  softWonFirstBonus: 0.3,
+  softWonFirstBonus: 0.45,
 };
 
 export interface HandAssessment {
@@ -309,6 +345,17 @@ function trucoThreshold(
     }
   }
 
+  if (features.twelveScoreBalance) {
+    if (mode === "respond" && atRiskValue > 0) {
+      const prev = prevTrucoLevel(atRiskValue);
+      if (oppScore + prev >= 12) {
+        threshold -= 0.25;
+      }
+    }
+    const scoreDiff = (myScore - oppScore) / 12;
+    threshold += 0.12 * scoreDiff;
+  }
+
   return Math.min(0.92, Math.max(0.15, threshold));
 }
 
@@ -353,12 +400,114 @@ function prevTrucoLevel(current: number): number {
   return seq[idx - 1]!;
 }
 
+function pickTied<T>(tied: readonly T[], rng: Rng | undefined): T {
+  if (tied.length === 1 || rng === undefined) return tied[0]!;
+  const idx = Math.min(tied.length - 1, Math.floor(rng() * tied.length));
+  return tied[idx]!;
+}
+
 function pickWeakest<T extends { card: Card }>(
+  actions: readonly T[],
+  vira: Card,
+  rng?: Rng,
+): T {
+  let min = getCardStrength(actions[0]!.card, vira);
+  for (let i = 1; i < actions.length; i++) {
+    const strength = getCardStrength(actions[i]!.card, vira);
+    if (strength < min) min = strength;
+  }
+  const tied = actions.filter((a) => getCardStrength(a.card, vira) === min);
+  return pickTied(tied, rng);
+}
+
+function pickStrongest<T extends { card: Card }>(
   actions: readonly T[],
   vira: Card,
 ): T {
   return actions.reduce((best, a) =>
-    getCardStrength(a.card, vira) < getCardStrength(best.card, vira) ? a : best,
+    getCardStrength(a.card, vira) > getCardStrength(best.card, vira) ? a : best,
+  );
+}
+
+/** T3: min suficiente, salvo quando duas vazas restam e a min não cobre. */
+function pickWinningCard<T extends { card: Card }>(
+  winning: readonly T[],
+  all: readonly T[],
+  view: PlayerView,
+  assessment: HandAssessment,
+  features: HeuristicV2Features,
+  rng: Rng | undefined,
+): T {
+  const twoRemain =
+    view.completedVazas.length === 0 ||
+    (assessment.mustWinBoth && view.completedVazas.length === 1);
+  if (!features.winMargin || assessment.isLastToPlay || !twoRemain) {
+    return pickWeakest(winning, view.vira, rng);
+  }
+  const seen = collectSeenCards(view);
+  const locked = winning.filter(
+    (a) => strongerCardsRemaining(a.card, view.vira, seen) === 0,
+  );
+  if (locked.length > 0) {
+    return pickWeakest(locked, view.vira, rng);
+  }
+  if (assessment.mustWinBoth) {
+    return pickStrongest(winning, view.vira);
+  }
+  const junk = all.filter((a) => !winning.includes(a));
+  if (junk.length > 0) {
+    return pickWeakest(junk, view.vira, rng);
+  }
+  return pickWeakest(winning, view.vira, rng);
+}
+
+/**
+ * T5: o parceiro leva com folga se somos o último ou se a carta dele não tem
+ * nenhuma mais forte viva. Sem folga, a vaza é frágil se ainda restam mais do
+ * que as 4 manilhas como ameaça (carta abaixo de um 3).
+ */
+const PARTNER_FRAGILE_THREAT = 4;
+
+function partnerThreat(view: PlayerView, partnerCard: Card): number {
+  return strongerCardsRemaining(partnerCard, view.vira, collectSeenCards(view));
+}
+
+function pickPartnerDiscard<T extends { card: Card }>(
+  actions: readonly T[],
+  view: PlayerView,
+  assessment: HandAssessment,
+  rng: Rng | undefined,
+): T {
+  const partnerCard = assessment.bestCardOnTable;
+  if (partnerCard && !assessment.isLastToPlay) {
+    const threat = partnerThreat(view, partnerCard);
+    const folga = threat === 0;
+    if (!folga && threat > PARTNER_FRAGILE_THREAT) {
+      const seen = collectSeenCards(view);
+      const locked = actions.filter(
+        (a) => strongerCardsRemaining(a.card, view.vira, seen) === 0,
+      );
+      if (locked.length > 0) {
+        return pickWeakest(locked, view.vira, rng);
+      }
+    }
+  }
+  return pickWeakest(actions, view.vira, rng);
+}
+
+type HiddenCardAction = Extract<Action, { type: "playHiddenCard" }>;
+
+/** Escolhe a carta mais forte para descartar sem revelá-la. */
+function pickStrongestHidden(
+  actions: readonly HiddenCardAction[],
+  handCards: readonly Card[],
+  vira: Card,
+): HiddenCardAction {
+  return actions.reduce((best, action) =>
+    getCardStrength(handCards[action.cardIndex]!, vira) >
+    getCardStrength(handCards[best.cardIndex]!, vira)
+      ? action
+      : best,
   );
 }
 
@@ -533,6 +682,9 @@ export function decideHeuristicV2Action(
   }
 
   // 4. Jogar carta
+  const playHiddenActions = actions.filter(
+    (a): a is HiddenCardAction => a.type === "playHiddenCard",
+  );
   const playCardActions = actions.filter((a) => a.type === "playCard") as {
     type: "playCard";
     card: Card;
@@ -541,16 +693,51 @@ export function decideHeuristicV2Action(
     const vazaIndex = view.completedVazas.length;
     const isOpening =
       !view.currentVaza || view.currentVaza.plays.every((p) => p === null);
+    const tieRng = features.rngTieBreak ? rng : undefined;
+
+    if (
+      features.vazaPlanning &&
+      !features.hiddenCardOutsideFerro &&
+      !features.winMargin &&
+      !features.partnerFolgaDiscard
+    ) {
+      if (isOpening && !features.openingProfile) {
+        return pickWeakest(playCardActions, view.vira, tieRng);
+      }
+      const planned = decidePlannedCardAction(
+        view,
+        playCardActions,
+        features,
+        tieRng,
+      );
+      if (planned) return planned;
+    }
 
     if (isOpening) {
-      return pickWeakest(playCardActions, view.vira);
+      if (
+        features.openingProfile &&
+        (assessment.mustWinBoth || assessment.holdsTopAlive)
+      ) {
+        return pickStrongest(playCardActions, view.vira);
+      }
+      return pickWeakest(playCardActions, view.vira, tieRng);
     }
 
     if (
       assessment.partnerIsWinning &&
       (features.generalizedPartnerDiscard || assessment.isLastToPlay)
     ) {
-      return pickWeakest(playCardActions, view.vira);
+      if (features.hiddenCardOutsideFerro && playHiddenActions.length > 0) {
+        return pickStrongestHidden(
+          playHiddenActions,
+          view.handCards,
+          view.vira,
+        );
+      }
+      if (features.partnerFolgaDiscard) {
+        return pickPartnerDiscard(playCardActions, view, assessment, tieRng);
+      }
+      return pickWeakest(playCardActions, view.vira, tieRng);
     }
 
     const bestCard = assessment.bestCardOnTable;
@@ -564,21 +751,33 @@ export function decideHeuristicV2Action(
           (a) => compareCards(a.card, bestCard, view.vira, RANKS, SUITS) === 0,
         );
         if (tieActions.length > 0) {
-          return pickWeakest(tieActions, view.vira);
+          return pickWeakest(tieActions, view.vira, tieRng);
         }
       }
 
       if (winningActions.length > 0) {
-        return pickWeakest(winningActions, view.vira);
+        return pickWinningCard(
+          winningActions,
+          playCardActions,
+          view,
+          assessment,
+          features,
+          tieRng,
+        );
       }
     }
 
-    return pickWeakest(playCardActions, view.vira);
+    if (features.hiddenCardOutsideFerro && playHiddenActions.length > 0) {
+      return pickStrongestHidden(playHiddenActions, view.handCards, view.vira);
+    }
+    return pickWeakest(playCardActions, view.vira, tieRng);
   }
 
   // 5. Ferro: playHiddenCard
-  const playHiddenActions = actions.filter((a) => a.type === "playHiddenCard");
   if (playHiddenActions.length > 0) {
+    if (features.ferroRandomIndex && playHiddenActions.length > 1) {
+      return pickTied(playHiddenActions, rng);
+    }
     return playHiddenActions[0] ?? null;
   }
 

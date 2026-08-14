@@ -1,12 +1,16 @@
 # Plano — Bot v3: chegar a 60% de winrate vs v2
 
-Status: **em execução — F6 (recalibrar).** v3 implementado (F0–F5) e fora do
-alvo: **49,7% vs v2**. Os knobs da F5 foram escolhidos a dedo; a varredura com
-eles nunca rodou. Revisões desta passagem estão em **Errata / revisão**.
+> **OBSOLETO (2026-08-13).** Este roteiro foi **substituído** por
+> `docs/plano-bot-forca.md` a partir da F6. Não execute F7–F10 daqui. A tabela
+> de «Estado medido» abaixo está **errada**: v3 vs v2 re-medido é **52,65%**,
+> não 49,71%. Números atuais e o novo norte (força percebida por humano) estão
+> em `docs/plano-bot-forca.md`.
 
-Este documento é a instrução de trabalho para quem for continuar (humano ou
-LLM). Leia **Missão**, **Estado medido** e **Regras de engajamento** antes de
-tocar em qualquer arquivo. O histórico das fases já feitas está no fim.
+Status: **substituído por `docs/plano-bot-forca.md`.** v3 implementado (F0–F5).
+O alvo «≥ 60% vs v2» deixou de ser o norte. Revisões históricas ficam abaixo.
+
+Histórico das fases F0–F5 e o Anexo A (buracos do v2) ainda são úteis. A missão
+«≥ 60% vs v2» e o roteiro F6–F10 **não**.
 
 ---
 
@@ -36,17 +40,21 @@ variância altíssima; um bot perfeito não vence sempre.
 
 ---
 
-## Estado medido (2026-07-26) — não confie nos números do histórico
+## Estado medido (2026-07-26) — **OBSOLETO**, não usar
 
-Todos abaixo: `runArena` espelhado, `--seed-block test` (seed 1.000.003), 10k
-seeds = **20k partidas**, SE ≈ 0,35pp (IC95% ≈ ±0,7pp).
+Re-medido em 2026-08-13 (ver `docs/plano-bot-forca.md` §1 e §7): v3 vs v2
+**52,65%**, v3 vs v1 **57,86%**, v2 vs v1 **56,24%**, MC vs v2 **43,33%**.
 
-| Confronto                | Winrate do A | Comando                                                                        |
-| ------------------------ | ------------ | ------------------------------------------------------------------------------ |
-| **v3 vs v2**             | **49,71%**   | `pnpm arena --a heuristic-v3 --b heuristic-v2 --games 10000 --seed-block test` |
-| v2 vs v1                 | 55,16%       | `--a heuristic-v2 --b heuristic-v1`                                            |
-| v3 vs v1                 | 55,93%       | `--a heuristic-v3 --b heuristic-v1`                                            |
-| montecarlo vs v2 (N=300) | 47,67%       | `--a montecarlo --b heuristic-v2 --games 150`                                  |
+Todos abaixo eram: `runArena` espelhado, `--seed-block test` (seed 1.000.003),
+10k seeds = **20k partidas**, SE ≈ 0,35pp (IC95% ≈ ±0,7pp). **Não reproduzem o
+estado atual.**
+
+| Confronto                | Winrate do A (obsoleto) | Comando                                                                        |
+| ------------------------ | ----------------------- | ------------------------------------------------------------------------------ |
+| **v3 vs v2**             | **49,71%** ❌ 52,65%    | `pnpm arena --a heuristic-v3 --b heuristic-v2 --games 10000 --seed-block test` |
+| v2 vs v1                 | 55,16% ❌ 56,24%        | `--a heuristic-v2 --b heuristic-v1`                                            |
+| v3 vs v1                 | 55,93% ❌ 57,86%        | `--a heuristic-v3 --b heuristic-v1`                                            |
+| montecarlo vs v2 (N=300) | 47,67% ❌ 43,33%        | `--a montecarlo --b heuristic-v2 --games 150`                                  |
 
 Throughput medido: **664 partidas/s** (v3 vs v2), 1609 (v2 vs v1), **7** (MC vs
 v2). O MC custa ~5ms por decisão — irrelevante para o servidor, caro para

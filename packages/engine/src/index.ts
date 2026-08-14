@@ -84,7 +84,7 @@ export { paulista, teamForSeat } from "./rulesets/paulista.js";
 export { createMatch } from "./match.js";
 
 // Simulation
-export { runArena, runSimulation } from "./simulation.js";
+export { ci95FromRates, runArena, runSimulation } from "./simulation.js";
 export type {
   ArenaConfig,
   ArenaDiagnostics,
