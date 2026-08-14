@@ -58,11 +58,12 @@ export {
   isManilha,
   manilhaCards,
   nextRank,
+  partialVazaLeader,
   resolveVaza,
   rankOrder,
   suitOrder,
 } from "./ranking.js";
-export type { VazaResult } from "./ranking.js";
+export type { PartialVazaLeader, VazaResult } from "./ranking.js";
 
 // Hand helpers
 export {

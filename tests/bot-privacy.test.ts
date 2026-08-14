@@ -18,6 +18,17 @@ describe("D-bot-1: bot só vê PlayerView", () => {
         .replace(/\/\/.*$/gm, "");
       expect(src, f).not.toMatch(/\bMatchState\b/);
       expect(src, f).not.toMatch(/\bcreateMatch\b/);
+      expect(src, f).not.toMatch(/\bcreatePRNG\b/);
+      expect(src, f).not.toMatch(/\bMatchMetadata\b/);
+      expect(src, f).not.toMatch(/\bHandState\b/);
+      expect(src, f).not.toMatch(/\bseed\b/);
     }
+  });
+
+  it("decideBotAction só recebe PlayerView", () => {
+    const src = readFileSync(join(BOTS_SRC, "index.ts"), "utf8");
+    expect(src).toMatch(
+      /export function decideBotAction\(\s*view:\s*PlayerView\s*\)/,
+    );
   });
 });

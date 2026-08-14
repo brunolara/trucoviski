@@ -981,9 +981,8 @@ const CASOS: Tatica[] = [
 
 /**
  * Posições que o v3 atual já acerta. O resto é falha conhecida (T1 coberta,
- * T3 margem, T5 sem folga) — E2 remove ids desta lista-negativa ao corrigir.
- *
- * Preenchido na primeira corrida da E1; não editar sem rerodar o teste.
+ * T3 margem, T5 sem folga, e min-win/abertura que o planner corrigido
+ * recusa porque ainda há gente por jogar). Não editar sem rerodar o teste.
  */
 const V3_PASSING: readonly string[] = [
   "abertura-fraca-1",
@@ -991,7 +990,6 @@ const V3_PASSING: readonly string[] = [
   "abertura-fraca-3",
   "abertura-duas-manilhas-1",
   "abertura-duas-manilhas-2",
-  "abertura-zap-lixo",
   "abertura-2a-perdeu-1a-1",
   "abertura-2a-perdeu-1a-2",
   "abertura-2a-ganhou-1a",
@@ -1001,12 +999,8 @@ const V3_PASSING: readonly string[] = [
   "canga-3-1",
   "canga-nao-quando-perdeu-1a",
   "canga-k-1",
-  "segunda-min-win-1",
-  "segunda-min-win-2",
-  "segunda-min-win-3",
   "segunda-ultimo-min-win",
   "segunda-nao-ganha-descarta",
-  "segunda-as-vs-k",
   "terceira-min-win-1",
   "terceira-min-win-2",
   "terceira-min-win-3",
@@ -1022,7 +1016,6 @@ const V3_PASSING: readonly string[] = [
   "t5-nao-come-3-do-parceiro",
   "t5-ultimo-ainda-descarta",
   "coberta-nao-na-1a",
-  "coberta-nao-quando-vence",
   "truco-lixo-vs-3",
   "truco-lixo-vs-6",
   "truco-lixo-vs-9",

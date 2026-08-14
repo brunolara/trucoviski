@@ -11,6 +11,7 @@ import {
   isManilha,
   manilhaCards,
   nextRank,
+  partialVazaLeader,
   PRNG_VERSION,
   paulista,
   resolveVaza,
@@ -235,6 +236,90 @@ describe("ranking", () => {
     // Seats 0 e 2 são parceiros → vence o mais próximo do mão
     expect(result.winner).toBe(0);
     expect(result.tiedSeats).toEqual([]);
+  });
+});
+
+describe("partialVazaLeader", () => {
+  const vira: Card = { suit: "ouros", rank: "7" }; // manilha = Q
+  const q: Card = { suit: "copas", rank: "3" };
+  const q2: Card = { suit: "espadas", rank: "3" };
+  const four: Card = { suit: "paus", rank: "4" };
+
+  it("mesa vazia sem candidata retorna null", () => {
+    expect(
+      partialVazaLeader(
+        [null, null, null, null],
+        null,
+        vira,
+        0,
+        RANK_ORDER,
+        SUIT_ORDER,
+      ),
+    ).toBeNull();
+  });
+
+  it("lidera com a única carta jogada", () => {
+    const leader = partialVazaLeader(
+      [null, q, null, null],
+      { seat: 0, card: four },
+      vira,
+      0,
+      RANK_ORDER,
+      SUIT_ORDER,
+    );
+    expect(leader).toEqual({
+      type: "team",
+      team: 1,
+      card: q,
+      seat: 1,
+    });
+  });
+
+  it("empate cross-time na mesa parcial é canga", () => {
+    const leader = partialVazaLeader(
+      [null, q, q2, four],
+      { seat: 0, card: four },
+      vira,
+      0,
+      RANK_ORDER,
+      SUIT_ORDER,
+    );
+    expect(leader?.type).toBe("tie");
+    if (leader?.type === "tie") {
+      expect(leader.card.rank).toBe("3");
+    }
+  });
+
+  it("empate entre parceiros fica com o time", () => {
+    const leader = partialVazaLeader(
+      [null, four, q, null],
+      { seat: 0, card: q2 },
+      vira,
+      0,
+      RANK_ORDER,
+      SUIT_ORDER,
+    );
+    expect(leader?.type).toBe("team");
+    if (leader?.type === "team") {
+      expect(leader.team).toBe(0);
+    }
+  });
+
+  it("ignora slots nulos (carta coberta)", () => {
+    const leader = partialVazaLeader(
+      [null, null, q, four],
+      { seat: 0, card: four },
+      vira,
+      0,
+      RANK_ORDER,
+      SUIT_ORDER,
+    );
+    expect(leader).toEqual({
+      type: "team",
+      team: 0,
+      card: q,
+      seat: 2,
+    });
   });
 });
 

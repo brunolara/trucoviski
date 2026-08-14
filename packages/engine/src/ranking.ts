@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- engine determinístico */
 
-import type { Card, Rank, RuleSet, Seat, Suit } from "./types.js";
+import type { Card, Rank, RuleSet, Seat, Suit, Team } from "./types.js";
 import { TEAMS } from "./types.js";
 
 // ---- Rank seguinte (wrap) -------------------------------------------
@@ -169,6 +169,64 @@ export function resolveVazaAmong(
   }
 
   return { winner: null, tiedSeats: ordered };
+}
+
+/**
+ * Quem lidera uma vaza ainda incompleta, usando a mesma regra de
+ * `resolveVazaAmong` (empate cross-time é canga; empate entre parceiros
+ * fica com o time). `candidate` cobre a jogada que o assento atual
+ * ainda vai fazer. Assentos com `plays[s] === null` (incluindo cobertos)
+ * não competem.
+ */
+export type PartialVazaLeader =
+  | {
+      readonly type: "team";
+      readonly team: Team;
+      readonly card: Card;
+      readonly seat: Seat;
+    }
+  | { readonly type: "tie"; readonly card: Card };
+
+export function partialVazaLeader(
+  plays: readonly [Card | null, Card | null, Card | null, Card | null],
+  candidate: { readonly seat: Seat; readonly card: Card } | null,
+  vira: Card,
+  dealerSeat: Seat,
+  rankOrder: readonly Rank[],
+  suitOrder: readonly Suit[],
+): PartialVazaLeader | null {
+  const seats: Seat[] = [];
+  const cards: Card[] = [];
+  for (let s = 0; s < 4; s++) {
+    const seat = s as Seat;
+    const card = candidate?.seat === seat ? candidate.card : plays[seat];
+    if (card) {
+      seats.push(seat);
+      cards.push(card);
+    }
+  }
+  if (seats.length === 0) return null;
+
+  const result = resolveVazaAmong(
+    seats,
+    cards,
+    vira,
+    dealerSeat,
+    rankOrder,
+    suitOrder,
+  );
+  if (result.winner !== null) {
+    const idx = seats.indexOf(result.winner);
+    return {
+      type: "team",
+      team: TEAMS[result.winner],
+      card: cards[idx]!,
+      seat: result.winner,
+    };
+  }
+  const tieSeat = result.tiedSeats[0]!;
+  const idx = seats.indexOf(tieSeat);
+  return { type: "tie", card: cards[idx] ?? cards[0]! };
 }
 
 /** Distância circular de um assento ao dealer (mão). */
