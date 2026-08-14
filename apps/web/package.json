@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@trucoviski/shared": "workspace:*",
     "@colyseus/sdk": "^0.17.43",
+    "@trucoviski/shared": "workspace:*",
     "framer-motion": "^12.42.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -21,6 +21,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^4.7.0",
     "vite": "^6.4.3",
-    "vite-plugin-pwa": "^0.21.1"
+    "vite-plugin-pwa": "^0.21.1",
+    "workbox-window": "7.4.1"
   }
 }
