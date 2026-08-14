@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "./store.js";
+import { UpdateBanner } from "./components/UpdateBanner.js";
 import { Home } from "./screens/Home.js";
 import { Lobby } from "./screens/Lobby.js";
 import { Mesa } from "./screens/Mesa.js";
@@ -31,6 +32,7 @@ export function App() {
 
   return (
     <>
+      <UpdateBanner />
       {reconnecting && (
         <div
           style={{

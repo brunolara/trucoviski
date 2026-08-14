@@ -121,7 +121,20 @@ export const trucoConfig = defineServer({
     app.use("/monitor", monitorRateLimit, monitorAuth, monitor());
 
     const webDist = path.resolve(process.cwd(), "apps/web/dist");
-    app.use(express.static(webDist));
+    app.use(
+      express.static(webDist, {
+        setHeaders(response, filePath) {
+          // ponytail: vite emite tudo com hash em /assets; o resto (index.html,
+          // sw.js, manifest, ícones) revalida por ETag pra não servir build velho.
+          response.setHeader(
+            "Cache-Control",
+            filePath.includes(`${path.sep}assets${path.sep}`)
+              ? "public, max-age=31536000, immutable"
+              : "no-cache",
+          );
+        },
+      }),
+    );
     app.use((request, response, next) => {
       if (
         request.method === "GET" &&
@@ -129,7 +142,9 @@ export const trucoConfig = defineServer({
         !request.path.startsWith("/matchmake") &&
         !request.path.startsWith("/room")
       ) {
-        response.sendFile(path.join(webDist, "index.html"));
+        response.sendFile(path.join(webDist, "index.html"), {
+          headers: { "Cache-Control": "no-cache" },
+        });
         return;
       }
       next();
